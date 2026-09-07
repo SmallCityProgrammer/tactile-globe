@@ -1,0 +1,663 @@
+<title>Globo Tátil</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#e3e6e9}
+  #gl{display:block;width:100vw;height:100vh;touch-action:none;cursor:grab}
+  #gl.drag{cursor:grabbing}
+  #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+       font:14px system-ui,sans-serif;color:#666}
+</style>
+<canvas id="gl"></canvas>
+<div id="msg"></div>
+<script id="geo" type="application/octet-stream">__DATA_B64__</script>
+<script>
+(function(){
+'use strict';
+
+var canvas = document.getElementById('gl');
+var msg = document.getElementById('msg');
+function fail(t){ msg.textContent = t; msg.style.display = 'flex'; }
+
+var gl = canvas.getContext('webgl2', {
+  alpha:false, antialias:false, depth:false, stencil:false,
+  premultipliedAlpha:false, preserveDrawingBuffer:false,
+  powerPreference:'high-performance'
+});
+if(!gl){ fail('WebGL2 nao disponivel neste navegador.'); return; }
+
+/* ============================================================
+   1. DADOS - varint zigzag -> cadeias de lon/lat (1e-6 grau)
+   ============================================================ */
+var QS = 1e-6;
+var chains = (function(){
+  var s = document.getElementById('geo').textContent;
+  var bin = atob(s);
+  var n = bin.length, buf = new Uint8Array(n), i;
+  for(i=0;i<n;i++) buf[i] = bin.charCodeAt(i);
+  bin = null;
+  var p = 0;
+  function rv(){
+    var x = 0, sh = 1, b;
+    do { b = buf[p++]; x += (b & 127) * sh; sh *= 128; } while (b & 128);
+    return (x % 2) ? -(x + 1) / 2 : x / 2;
+  }
+  var nc = rv(), out = new Array(nc), lx = 0, ly = 0;
+  for(var c=0;c<nc;c++){
+    var np = rv(), a = new Int32Array(2*np);
+    for(var j=0;j<np;j++){ lx += rv(); ly += rv(); a[2*j] = lx; a[2*j+1] = ly; }
+    out[c] = a;
+  }
+  return out;
+})();
+
+/* ============================================================
+   2. NIVEIS DE DETALHE
+      tol  = tolerancia Douglas-Peucker (graus)
+      step = passo maximo de densificacao (graus)
+   ============================================================ */
+var LODS = [
+  { tol: 0,     step: 0.02 },
+  { tol: 0.008, step: 0.06 },
+  { tol: 0.04,  step: 0.25 },
+  { tol: 0.15,  step: 0.90 },
+  { tol: 0.45,  step: 2.50 }
+];
+
+function simplify(ch, tolQ){
+  var n = ch.length/2;
+  if (tolQ <= 0 || n < 3) return ch;
+  var keep = new Uint8Array(n); keep[0] = 1; keep[n-1] = 1;
+  var st = [0, n-1], t2 = tolQ*tolQ;
+  while (st.length){
+    var j = st.pop(), i = st.pop();
+    if (j - i < 2) continue;
+    var ax = ch[2*i], ay = ch[2*i+1], dx = ch[2*j]-ax, dy = ch[2*j+1]-ay;
+    var dd = dx*dx + dy*dy, best = -1, bi = -1;
+    for (var k = i+1; k < j; k++){
+      var px = ch[2*k]-ax, py = ch[2*k+1]-ay, d2;
+      if (dd === 0){ d2 = px*px + py*py; }
+      else {
+        var t = (px*dx + py*dy)/dd; t = t < 0 ? 0 : t > 1 ? 1 : t;
+        var ex = px - t*dx, ey = py - t*dy; d2 = ex*ex + ey*ey;
+      }
+      if (d2 > best){ best = d2; bi = k; }
+    }
+    if (best > t2){ keep[bi] = 1; st.push(i, bi, bi, j); }
+  }
+  var m = 0, q;
+  for (q = 0; q < n; q++) if (keep[q]) m++;
+  var out = new Int32Array(2*m), w = 0;
+  for (q = 0; q < n; q++) if (keep[q]){ out[2*w] = ch[2*q]; out[2*w+1] = ch[2*q+1]; w++; }
+  return out;
+}
+
+var DEG = Math.PI/180;
+
+function subCount(ax, ay, bx, by, step){
+  var dx = (bx-ax)*QS, dy = (by-ay)*QS;
+  if (dx > 180) dx -= 360; else if (dx < -180) dx += 360;
+  if (dx < 0) dx = -dx;
+  if (dy < 0) dy = -dy;
+  var k = Math.ceil((dx > dy ? dx : dy)/step);
+  return k < 1 ? 1 : k;
+}
+
+/* lon/lat em graus -> ponto na esfera unitaria (leste = direita, norte = cima) */
+function sph(lon, lat, o){
+  var la = lat*DEG, lo = lon*DEG, cl = Math.cos(la);
+  o[0] = cl*Math.cos(lo); o[1] = Math.sin(la); o[2] = -cl*Math.sin(lo);
+}
+
+function buildLOD(idx){
+  var tolQ = LODS[idx].tol/QS, step = LODS[idx].step;
+  var simp = new Array(chains.length), c, i, n, s;
+
+  for (c = 0; c < chains.length; c++) simp[c] = simplify(chains[c], tolQ);
+
+  var segs = 0;
+  for (c = 0; c < simp.length; c++){
+    s = simp[c]; n = s.length/2;
+    for (i = 0; i+1 < n; i++) segs += subCount(s[2*i], s[2*i+1], s[2*i+2], s[2*i+3], step);
+  }
+
+  var data = new Float32Array(9*segs), w = 0;
+  var A = [0,0,0], B = [0,0,0];
+
+  for (c = 0; c < simp.length; c++){
+    var ch = simp[c]; n = ch.length/2;
+    if (n < 2) continue;
+    sph(ch[0]*QS, ch[1]*QS, A);
+    for (i = 0; i+1 < n; i++){
+      var lonA = ch[2*i]*QS, latA = ch[2*i+1]*QS;
+      var dlon = ch[2*i+2]*QS - lonA;
+      if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
+      var dlat = ch[2*i+3]*QS - latA;
+      var k = subCount(ch[2*i], ch[2*i+1], ch[2*i+2], ch[2*i+3], step);
+      for (var q = 1; q <= k; q++){
+        var t = q/k;
+        sph(lonA + dlon*t, latA + dlat*t, B);
+        for (var d = 0; d < 3; d++){
+          var v = A[d], hi = Math.fround(v);
+          data[w+d]   = hi;
+          data[w+3+d] = Math.fround(v - hi);
+          data[w+6+d] = Math.fround(B[d] - v);
+        }
+        w += 9;
+        A[0] = B[0]; A[1] = B[1]; A[2] = B[2];
+      }
+    }
+  }
+  return { count: segs, data: data };
+}
+
+/* ============================================================
+   3. WEBGL
+   ============================================================ */
+function sh(type, src){
+  var o = gl.createShader(type);
+  gl.shaderSource(o, src); gl.compileShader(o);
+  if(!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o));
+  return o;
+}
+function prog(vs, fs){
+  var p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+function U(p){
+  var m = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (var i = 0; i < n; i++){
+    var nm = gl.getActiveUniform(p, i).name;
+    m[nm] = gl.getUniformLocation(p, nm);
+  }
+  return m;
+}
+
+/* passe 1: esfera analitica - interseccao exata, sem facetas em nenhum zoom */
+var SPH_VS = '#version 300 es\n' + [
+'out vec2 vNdc;',
+'void main(){',
+'  float x = float((gl_VertexID & 1) << 2) - 1.0;',
+'  float y = float((gl_VertexID & 2) << 1) - 1.0;',
+'  vNdc = vec2(x, y);',
+'  gl_Position = vec4(x, y, 0.0, 1.0);',
+'}'].join('\n');
+
+var SPH_FS = '#version 300 es\n' + [
+'precision highp float;',
+'in vec2 vNdc;',
+'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot;',
+'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR;',
+'out vec4 frag;',
+'void main(){',
+'  vec3 d = normalize(uRight*(vNdc.x*uTanHF*uAspect) + uUp*(vNdc.y*uTanHF) + uFwd);',
+'  float ct = -dot(d, uCamDir);',
+'  float s2 = max(0.0, 1.0 - ct*ct);',
+'  float disc = ct*ct - uC2*s2;',
+'  vec3 bg = mix(uBgBot, uBgTop, vNdc.y*0.5 + 0.5);',
+'  float gr = length(vec2(dFdx(disc), dFdy(disc)));',
+'  float cov = clamp(disc/max(gr, 1e-30) + 0.5, 0.0, 1.0);',
+'  if (ct <= 0.0 || cov <= 0.0){ frag = vec4(bg, 1.0); return; }',
+'  float sq = sqrt(max(disc, 0.0));',
+'  float t  = uC2 / max(ct*uR + sq, 1e-20);',
+'  vec3 p = t*d;',
+'  vec3 n = normalize(p + uR*uCamDir);',
+'  float diff = pow(clamp(dot(n, uLight)*0.5 + 0.5, 0.0, 1.0), 1.20);',
+'  float w    = clamp((dot(n, uCamDir) - uInvR)/uHOverR, 0.0, 1.0);',
+'  float limb = mix(0.885, 1.0, pow(w, 0.42));',
+'  float shade = mix(0.795, 1.0, diff) * limb;',
+'  frag = vec4(mix(bg, vec3(shade), cov), 1.0);',
+'}'].join('\n');
+
+/* passe 2: linhas instanciadas, largura constante em pixels,
+   posicoes em precisao dupla emulada (hi/lo relativo ao olho) */
+var LIN_VS = '#version 300 es\n' + [
+'precision highp float;',
+'layout(location=0) in vec3 aHi;',
+'layout(location=1) in vec3 aLo;',
+'layout(location=2) in vec3 aDelta;',
+'uniform vec3 uCamHi, uCamLo;',
+'uniform mat3 uView;',
+'uniform vec2 uVp;',
+'uniform float uTanHF, uAspect, uNear, uPad, uHorizK;',
+'uniform vec3 uCamDir;',
+'out vec3 vRel;',
+'out vec2 vSeg;',
+'flat out float vLen;',
+'vec2 toPx(vec3 v){',
+'  vec2 ndc = vec2(v.x/(-v.z)/(uTanHF*uAspect), v.y/(-v.z)/uTanHF);',
+'  return (ndc*0.5 + 0.5)*uVp;',
+'}',
+'void main(){',
+'  vec3 relA = (aHi - uCamHi) + (aLo - uCamLo);',
+'  vec3 relB = relA + aDelta;',
+'  if (dot(relA, uCamDir) + uHorizK < 0.0 && dot(relB, uCamDir) + uHorizK < 0.0){',
+'    vRel = vec3(0.0); vSeg = vec2(0.0); vLen = 0.0;',
+'    gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return;',
+'  }',
+'  vec3 va = uView*relA, vb = uView*relB;',
+'  if (va.z > -uNear && vb.z > -uNear){',
+'    vRel = vec3(0.0); vSeg = vec2(0.0); vLen = 0.0;',
+'    gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return;',
+'  }',
+'  float ta = 0.0, tb = 1.0;',
+'  float tc = (va.z + uNear)/(va.z - vb.z);',
+'  if (va.z > -uNear) ta = tc; else if (vb.z > -uNear) tb = tc;',
+'  vec3 ca = mix(va, vb, ta),     cb = mix(va, vb, tb);',
+'  vec3 ra = mix(relA, relB, ta), rb = mix(relA, relB, tb);',
+'  vec2 sa = toPx(ca), sb = toPx(cb);',
+'  vec2 dv = sb - sa;',
+'  float len = length(dv);',
+'  vec2 dir = len > 1e-6 ? dv/len : vec2(1.0, 0.0);',
+'  vec2 nr  = vec2(-dir.y, dir.x);',
+'  float s = float(gl_VertexID & 1)*2.0 - 1.0;',
+'  float e = float((gl_VertexID >> 1) & 1);',
+'  vec2 pos = mix(sa, sb, e) + nr*(s*uPad) + dir*((e*2.0 - 1.0)*uPad);',
+'  vSeg = vec2(e*len + (e*2.0 - 1.0)*uPad, s*uPad);',
+'  vLen = len;',
+'  vRel = mix(ra, rb, e);',
+'  gl_Position = vec4((pos/uVp)*2.0 - 1.0, 0.0, 1.0);',
+'}'].join('\n');
+
+var LIN_FS = '#version 300 es\n' + [
+'precision highp float;',
+'in vec3 vRel;',
+'in vec2 vSeg;',
+'flat in float vLen;',
+'uniform vec3 uCamDir, uLight, uLineColor;',
+'uniform float uHorizK, uR, uHalfW;',
+'out vec4 frag;',
+'void main(){',
+'  float ax = clamp(vSeg.x, 0.0, vLen);',
+'  float dist = length(vec2(vSeg.x - ax, vSeg.y));',
+'  float a = clamp(uHalfW - dist + 0.5, 0.0, 1.0);',
+'  float g  = dot(vRel, uCamDir) + uHorizK;',
+'  float gw = length(vec2(dFdx(g), dFdy(g)));',
+'  a *= clamp(g/max(gw, 1e-30) + 0.5, 0.0, 1.0);',
+'  if (a <= 0.0) discard;',
+'  vec3 n = normalize(vRel + uR*uCamDir);',
+'  float diff = clamp(dot(n, uLight)*0.5 + 0.5, 0.0, 1.0);',
+'  frag = vec4(uLineColor * mix(0.86, 1.0, diff), a);',
+'}'].join('\n');
+
+var pSph, pLin, uSph, uLin;
+try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); }
+catch(e){ fail('Erro de shader: ' + e.message); return; }
+uSph = U(pSph); uLin = U(pLin);
+
+var emptyVao = gl.createVertexArray();
+var lodCache = new Array(LODS.length);
+
+function uploadLOD(idx){
+  var b = buildLOD(idx);
+  var vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  var vbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, b.data, gl.STATIC_DRAW);
+  for (var i = 0; i < 3; i++){
+    gl.enableVertexAttribArray(i);
+    gl.vertexAttribPointer(i, 3, gl.FLOAT, false, 36, i*12);
+    gl.vertexAttribDivisor(i, 1);
+  }
+  gl.bindVertexArray(null);
+  lodCache[idx] = { vao: vao, count: b.count };
+  return lodCache[idx];
+}
+
+/* ============================================================
+   4. CAMERA - todo o estado em precisao dupla no CPU
+   ============================================================ */
+var FOV = 45*DEG, TANHF = Math.tan(FOV/2);
+var H_MIN = 2.0e-6, H_MAX = 24.0;
+var lon = -50, lat = -12;
+var logH = Math.log(2.1), logHTarget = logH, h = Math.exp(logH);
+
+var camU = [0,0,0], camX = [0,0,0], camY = [0,0,0], camPos = [0,0,0];
+var camHi = new Float32Array(3), camLo = new Float32Array(3);
+var viewMat = new Float32Array(9);
+var lightW = new Float32Array(3);
+var R = 1, C2 = 0;
+
+function norm(v){
+  var l = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+  v[0]/=l; v[1]/=l; v[2]/=l; return v;
+}
+
+function updateCam(){
+  h = Math.exp(logH);
+  R  = 1 + h;
+  C2 = 2*h + h*h;
+  sph(lon, lat, camU);
+  camX[0] = camU[2]; camX[1] = 0; camX[2] = -camU[0];
+  var lx = Math.sqrt(camX[0]*camX[0] + camX[2]*camX[2]);
+  if (lx < 1e-12){ camX[0] = 1; camX[1] = 0; camX[2] = 0; }
+  else { camX[0] /= lx; camX[2] /= lx; }
+  camY[0] = camU[1]*camX[2] - camU[2]*camX[1];
+  camY[1] = camU[2]*camX[0] - camU[0]*camX[2];
+  camY[2] = camU[0]*camX[1] - camU[1]*camX[0];
+  norm(camY);
+  var i;
+  for (i = 0; i < 3; i++){
+    camPos[i] = R*camU[i];
+    var hi = Math.fround(camPos[i]);
+    camHi[i] = hi;
+    camLo[i] = Math.fround(camPos[i] - hi);
+  }
+  viewMat[0]=camX[0]; viewMat[3]=camX[1]; viewMat[6]=camX[2];
+  viewMat[1]=camY[0]; viewMat[4]=camY[1]; viewMat[7]=camY[2];
+  viewMat[2]=camU[0]; viewMat[5]=camU[1]; viewMat[8]=camU[2];
+  var LV = [-0.42, 0.52, 0.74];
+  for (i = 0; i < 3; i++) lightW[i] = camX[i]*LV[0] + camY[i]*LV[1] + camU[i]*LV[2];
+  var ll = Math.sqrt(lightW[0]*lightW[0] + lightW[1]*lightW[1] + lightW[2]*lightW[2]);
+  lightW[0]/=ll; lightW[1]/=ll; lightW[2]/=ll;
+}
+
+var rayD = [0,0,0];
+function rayFor(px, py){
+  var cw = canvas.clientWidth, chh = canvas.clientHeight;
+  var nx = (px/cw)*2 - 1, ny = 1 - (py/chh)*2;
+  var a = nx*TANHF*(cw/chh), b = ny*TANHF;
+  rayD[0] = camX[0]*a + camY[0]*b - camU[0];
+  rayD[1] = camX[1]*a + camY[1]*b - camU[1];
+  rayD[2] = camX[2]*a + camY[2]*b - camU[2];
+  return norm(rayD);
+}
+
+/* ponto da esfera sob um pixel; fora do disco devolve o ponto mais proximo
+   0 = atras da camera, 1 = fora do disco, 2 = acerto real */
+function pick(px, py, out){
+  var d = rayFor(px, py);
+  var ct = -(d[0]*camU[0] + d[1]*camU[1] + d[2]*camU[2]);
+  if (ct <= 0) return 0;
+  var s2 = 1 - ct*ct; if (s2 < 0) s2 = 0;
+  var disc = ct*ct - C2*s2, t, hit;
+  if (disc >= 0){ t = C2/(ct*R + Math.sqrt(disc)); hit = 1; }
+  else { t = R*ct; hit = 0; }
+  out[0] = t*d[0] + R*camU[0];
+  out[1] = t*d[1] + R*camU[1];
+  out[2] = t*d[2] + R*camU[2];
+  norm(out);
+  return hit ? 2 : 1;
+}
+
+/* Coloca o ponto G do mundo exatamente sob o pixel (px,py), resolvendo
+   lon/lat em forma fechada. Com a camera "norte para cima" sobram 2 graus
+   de liberdade para 2 restricoes, entao a solucao e exata - sem iteracao
+   e sem deriva acumulada ao arrastar ou dar zoom. */
+function place(G, px, py){
+  var cw = canvas.clientWidth, chh = canvas.clientHeight;
+  var nx = (px/cw)*2 - 1, ny = 1 - (py/chh)*2;
+  var dx = nx*TANHF*(cw/chh), dy = ny*TANHF, dz = -1;
+  var dl = Math.sqrt(dx*dx + dy*dy + 1); dx/=dl; dy/=dl; dz/=dl;
+
+  // interseccao com a esfera nas coordenadas da camera (centro em (0,0,-R))
+  var bb = -R*dz;
+  if (bb <= 0) return false;
+  var disc = bb*bb - C2;
+  var t = disc >= 0 ? C2/(bb + Math.sqrt(disc)) : bb;   // fora do disco: ponto tangente
+  var a = t*dx, b = t*dy, c = t*dz + R;
+  var gl2 = Math.sqrt(a*a + b*b + c*c);
+  if (gl2 < 1e-12) return false;
+  a/=gl2; b/=gl2; c/=gl2;
+
+  // G_y = b*cos(phi) + c*sin(phi)  ->  phi
+  var rho = Math.sqrt(b*b + c*c);
+  if (rho < 1e-12) return false;
+  var sv = G[1]/rho, psi = Math.atan2(b, c), phi;
+  var LIM = 89.9999*DEG, cur = lat*DEG;
+  if (sv >= 1 || sv <= -1){
+    phi = (sv > 0 ? Math.PI/2 : -Math.PI/2) - psi;      // inalcancavel: o mais proximo
+  } else {
+    var as = Math.asin(sv), best = null, bd = Infinity;
+    var cand = [as - psi, Math.PI - as - psi];
+    for (var i = 0; i < cand.length; i++){
+      for (var k = -1; k <= 1; k++){
+        var v = cand[i] + k*2*Math.PI;
+        if (v < -LIM || v > LIM) continue;
+        var d = Math.abs(v - cur);
+        if (d < bd){ bd = d; best = v; }
+      }
+    }
+    if (best === null) return false;
+    phi = best;
+  }
+  if (phi >  LIM) phi =  LIM;
+  if (phi < -LIM) phi = -LIM;
+
+  // resolve lon a partir das componentes x,z
+  var cp = Math.cos(phi), sp = Math.sin(phi);
+  var K = c*cp - b*sp, den = a*a + K*K;
+  if (den < 1e-18) return false;
+  lat = phi/DEG;
+  lon = Math.atan2((-a*G[0] - K*G[2])/den, (K*G[0] - a*G[2])/den)/DEG;
+  updateCam();
+  return true;
+}
+
+/* ============================================================
+   5. INTERACAO - arrastar para girar, roda do mouse para zoom
+   ============================================================ */
+var pointers = new Map();
+var grabG = null, pinchDist = 0, anchor = null;
+var dirty = true;
+
+function clampLog(v){
+  var lo = Math.log(H_MIN), hi = Math.log(H_MAX);
+  return v < lo ? lo : v > hi ? hi : v;
+}
+function grab(cx, cy){
+  var r = canvas.getBoundingClientRect(), o = [0,0,0];
+  return pick(cx - r.left, cy - r.top, o) ? o : null;
+}
+function pinchSpan(){
+  var a = null, b = null;
+  pointers.forEach(function(v){ if(!a) a = v; else if(!b) b = v; });
+  return (a && b) ? Math.sqrt((a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y)) : 0;
+}
+
+canvas.addEventListener('pointerdown', function(e){
+  try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  anchor = null;
+  if (pointers.size === 1){
+    grabG = grab(e.clientX, e.clientY);
+    canvas.classList.add('drag');
+  } else if (pointers.size === 2){
+    grabG = null; pinchDist = pinchSpan();
+  }
+});
+
+canvas.addEventListener('pointermove', function(e){
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1 && grabG){
+    var r = canvas.getBoundingClientRect();
+    if (place(grabG, e.clientX - r.left, e.clientY - r.top)) requestRender();
+  } else if (pointers.size === 2){
+    var d = pinchSpan();
+    if (pinchDist > 0 && d > 0){
+      logHTarget = clampLog(logHTarget - Math.log(d/pinchDist));
+      logH = logHTarget; updateCam(); requestRender();
+    }
+    pinchDist = d;
+  }
+});
+
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0){ grabG = null; canvas.classList.remove('drag'); }
+  else if (pointers.size === 1){
+    pointers.forEach(function(v){ grabG = grab(v.x, v.y); });
+    pinchDist = 0;
+  }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+canvas.addEventListener('wheel', function(e){
+  e.preventDefault();
+  var dy = e.deltaY;
+  if (e.deltaMode === 1) dy *= 16;
+  else if (e.deltaMode === 2) dy *= 400;
+  if (dy > 240) dy = 240; else if (dy < -240) dy = -240;
+  var r = canvas.getBoundingClientRect();
+  var px = e.clientX - r.left, py = e.clientY - r.top;
+  var g = [0,0,0];
+  anchor = (pick(px, py, g) === 2) ? { g: g, px: px, py: py } : null;
+  logHTarget = clampLog(logHTarget + dy*0.0032);
+  requestRender();
+}, { passive: false });
+
+/* mantem o ponto sob o cursor travado enquanto o zoom acontece */
+function reanchor(){
+  if (anchor) place(anchor.g, anchor.px, anchor.py);
+}
+
+/* ============================================================
+   6. LACO DE RENDERIZACAO
+   ============================================================ */
+var dpr = 1, vpW = 0, vpH = 0;
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  var w  = Math.max(1, Math.round(canvas.clientWidth*dpr));
+  var hh = Math.max(1, Math.round(canvas.clientHeight*dpr));
+  if (w !== vpW || hh !== vpH){
+    vpW = w; vpH = hh;
+    canvas.width = w; canvas.height = hh;
+    gl.viewport(0, 0, w, hh);
+    requestRender();
+  }
+}
+window.addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
+
+function pickLOD(){
+  var degPerPx = (h*FOV/vpH)/DEG;
+  var best = 0, i;
+  for (i = LODS.length - 1; i >= 0; i--){
+    if (LODS[i].tol <= 0.8*degPerPx){ best = i; break; }
+  }
+  if (lodCache[best]) return lodCache[best];
+  for (i = best; i >= 0; i--) if (lodCache[i]) return lodCache[i];   // prefere detalhe a mais
+  for (i = best; i < LODS.length; i++) if (lodCache[i]) return lodCache[i];
+  return null;
+}
+
+var BG_TOP = new Float32Array([0.918, 0.929, 0.937]);
+var BG_BOT = new Float32Array([0.839, 0.855, 0.871]);
+var LINE   = new Float32Array([0.376, 0.404, 0.427]);
+var LINE_W = 1.15;
+
+var last = 0, rafId = 0;
+function requestRender(){
+  dirty = true;
+  if (!rafId) rafId = requestAnimationFrame(frame);
+}
+
+function frame(ts){
+  rafId = 0;
+  resize();
+  var dt = last ? Math.min((ts - last)/1000, 0.1) : 0.016;
+  last = ts;
+
+  var easing = Math.abs(logHTarget - logH) > 1e-7;
+  if (easing){
+    logH += (logHTarget - logH)*(1 - Math.exp(-dt/0.055));
+    if (Math.abs(logHTarget - logH) <= 1e-7) logH = logHTarget;
+    updateCam();
+    reanchor();
+    dirty = true;
+  } else if (anchor && !pointers.size){
+    anchor = null;
+  }
+
+  if (!dirty){
+    if (easing) requestRender();
+    if (!rafId) last = 0;
+    return;
+  }
+  dirty = false;
+  draw();
+
+  if (easing) requestRender();
+  if (!rafId) last = 0;
+}
+
+function draw(){
+  var aspect = vpW/vpH;
+
+  gl.disable(gl.BLEND);
+  gl.bindVertexArray(emptyVao);
+  gl.useProgram(pSph);
+  gl.uniform3f(uSph.uRight, camX[0], camX[1], camX[2]);
+  gl.uniform3f(uSph.uUp,    camY[0], camY[1], camY[2]);
+  gl.uniform3f(uSph.uFwd,  -camU[0], -camU[1], -camU[2]);
+  gl.uniform3f(uSph.uCamDir, camU[0], camU[1], camU[2]);
+  gl.uniform3fv(uSph.uLight, lightW);
+  gl.uniform3fv(uSph.uBgTop, BG_TOP);
+  gl.uniform3fv(uSph.uBgBot, BG_BOT);
+  gl.uniform1f(uSph.uTanHF, TANHF);
+  gl.uniform1f(uSph.uAspect, aspect);
+  gl.uniform1f(uSph.uC2, C2);
+  gl.uniform1f(uSph.uR, R);
+  gl.uniform1f(uSph.uInvR, 1/R);
+  gl.uniform1f(uSph.uHOverR, h/R);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  var lod = pickLOD();
+  if (lod){
+    var halfW = LINE_W*dpr*0.5;
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(pLin);
+    gl.uniform3fv(uLin.uCamHi, camHi);
+    gl.uniform3fv(uLin.uCamLo, camLo);
+    gl.uniformMatrix3fv(uLin.uView, false, viewMat);
+    gl.uniform2f(uLin.uVp, vpW, vpH);
+    gl.uniform1f(uLin.uTanHF, TANHF);
+    gl.uniform1f(uLin.uAspect, aspect);
+    gl.uniform1f(uLin.uNear, h*0.5);
+    gl.uniform1f(uLin.uPad, halfW + 1.0);
+    gl.uniform1f(uLin.uHalfW, halfW);
+    gl.uniform3f(uLin.uCamDir, camU[0], camU[1], camU[2]);
+    gl.uniform3fv(uLin.uLight, lightW);
+    gl.uniform3fv(uLin.uLineColor, LINE);
+    gl.uniform1f(uLin.uHorizK, C2/R);
+    gl.uniform1f(uLin.uR, R);
+    gl.bindVertexArray(lod.vao);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, lod.count);
+    gl.bindVertexArray(null);
+  }
+}
+
+resize();
+updateCam();
+uploadLOD(3);
+requestRender();
+
+var pending = [2, 1, 0, 4];
+(function next(){
+  if (!pending.length) return;
+  var i = pending.shift();
+  setTimeout(function(){ uploadLOD(i); requestRender(); next(); }, 30);
+})();
+
+window.__globe = {
+  render: function(){ resize(); updateCam(); draw(); },
+  info: function(){
+    return { lon: lon, lat: lat, h: h, altKm: h*6371,
+             lods: lodCache.map(function(l){ return l ? l.count : null; }),
+             vp: [vpW, vpH], dpr: dpr };
+  },
+  set: function(o){
+    if (o.lon !== undefined) lon = o.lon;
+    if (o.lat !== undefined) lat = o.lat;
+    if (o.h   !== undefined) logH = logHTarget = clampLog(Math.log(o.h));
+    anchor = null; updateCam(); requestRender();
+  }
+};
+})();
+</script>

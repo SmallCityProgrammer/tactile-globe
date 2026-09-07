@@ -1,0 +1,6 @@
+# fonte bruta do Natural Earth (13 MB, baixada por tools/build.mjs)
+data/*.geojson
+
+node_modules/
+.DS_Store
+Thumbs.db

@@ -16,25 +16,31 @@ import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TPL = path.join(ROOT, 'src', 'template.html');
-const BIN = path.join(ROOT, 'data', 'borders.bin');
+const BINS = [
+  ['__DATA_B64__',  path.join(ROOT, 'data', 'borders.bin')],
+  ['__DATA2_B64__', path.join(ROOT, 'data', 'subdivisions.bin')]
+];
 const OUT = path.join(ROOT, 'globo.html');
 
-if (!fs.existsSync(BIN)) {
-  console.error('data/borders.bin nao existe — rode antes:  node tools/build.mjs');
-  process.exit(1);
-}
+let out = fs.readFileSync(TPL, 'utf8');
+let dados = 0;
 
-const tpl = fs.readFileSync(TPL, 'utf8');
-if (!tpl.includes('__DATA_B64__')) {
-  console.error('src/template.html nao tem o marcador __DATA_B64__');
-  process.exit(1);
+for (const [marker, file] of BINS) {
+  if (!fs.existsSync(file)) {
+    console.error(`${path.relative(ROOT, file)} nao existe — rode antes:  node tools/build.mjs`);
+    process.exit(1);
+  }
+  if (!out.includes(marker)) {
+    console.error(`src/template.html nao tem o marcador ${marker}`);
+    process.exit(1);
+  }
+  const b64 = fs.readFileSync(file).toString('base64');
+  dados += b64.length;
+  out = out.replace(marker, b64);
 }
-
-const b64 = fs.readFileSync(BIN).toString('base64');
-const out = tpl.replace('__DATA_B64__', b64);
 
 // checagem: o JS embutido tem que ser sintaticamente valido
 new Function(out.match(/<script>\n([\s\S]*)<\/script>/)[1]);
 
 fs.writeFileSync(OUT, out, 'utf8');
-console.log(`globo.html  ${(out.length / 1048576).toFixed(2)} MB  (dados: ${(b64.length / 1048576).toFixed(2)} MB base64)`);
+console.log(`globo.html  ${(out.length / 1048576).toFixed(2)} MB  (dados: ${(dados / 1048576).toFixed(2)} MB base64)`);

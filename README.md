@@ -1,10 +1,10 @@
 # Globo Tátil
 
 Um globo terrestre branco com as divisas dos países em cinza, e nada mais. Sem
-oceanos, sem relevo, sem rótulos, sem interface. Scroll para zoom, arrastar para
-girar.
+oceanos, sem relevo, sem rótulos. Scroll para zoom, arrastar para girar. Um único
+botão acrescenta as divisas de estados e províncias de todos os países.
 
-Arquivo único de 3,2 MB, sem nenhuma dependência externa — abre por `file://`,
+Arquivo único de 5,6 MB, sem nenhuma dependência externa — abre por `file://`,
 com duplo clique, offline.
 
 ![O globo](docs/globo.png)
@@ -19,6 +19,7 @@ Abra `globo.html`. É só isso.
 |---|---|
 | scroll | zoom, ancorado no ponto sob o cursor |
 | arrastar | gira o globo, com o ponto agarrado colado no cursor |
+| botão `estados e províncias` (ou tecla `d`) | liga/desliga as divisas internas |
 
 A faixa de zoom vai do globo inteiro pequeno na tela até ~13 m de altitude.
 
@@ -82,6 +83,34 @@ próximos, os deltas cabem quase sempre em 1–2 bytes: **5,21 bytes por ponto**
 > e não valia a dependência de `DecompressionStream`. Ficou base64 puro.
 
 Resultado: 4.324 cadeias, 479.106 pontos, 474.782 segmentos únicos.
+
+### A segunda camada: estados e províncias
+
+Vem do `admin_1_states_provinces` do Natural Earth — 4.596 subdivisões em 253
+países, 1,3 milhão de pontos.
+
+O problema é que esses polígonos **também** contêm o litoral e as fronteiras
+nacionais: cada estado costeiro carrega seu pedaço de costa. Desenhar a base
+inteira por cima da primeira camada dobraria todo o contorno dos países.
+
+A saída depende de um fato que precisou ser verificado antes de valer a pena:
+as duas bases são construídas sobre a **mesma topologia**. Medindo com os
+vértices quantizados, **99,6% dos segmentos do admin_0 aparecem bit a bit
+idênticos no admin_1**. Isso permite subtrair por chave exata, sem tolerância
+nem heurística de proximidade:
+
+| segmentos do admin_1 | |
+|---|---|
+| já presentes na camada de países | 540.864 → descartados |
+| duplicados entre estados vizinhos | 371.157 → descartados |
+| artificiais (polo, antimeridiano) | 775 → descartados |
+| **divisas internas restantes** | **373.827** |
+
+Sobram 5.967 cadeias e 379.794 pontos — 1,78 MB. É essa camada que o botão liga,
+desenhada num cinza mais claro e mais fina que a dos países, para a hierarquia
+ficar legível: divisa nacional pesa mais que divisa estadual.
+
+![Estados brasileiros e departamentos vizinhos](docs/estados.png)
 
 ---
 
@@ -160,15 +189,20 @@ Cinco níveis, simplificados com Douglas–Peucker no carregamento e escolhidos 
 resolução angular por pixel. Sem isso, o globo visto de longe vira um borrão escuro
 de tanta linha sobreposta.
 
-| nível | tolerância | passo | segmentos |
-|---|---|---|---|
-| 0 | — (integral) | 0,02° | 940.899 |
-| 1 | 0,008° | 0,06° | 328.199 |
-| 2 | 0,04° | 0,25° | 83.912 |
-| 3 | 0,15° | 0,90° | 23.614 |
-| 4 | 0,45° | 2,50° | 9.545 |
+| nível | tolerância | passo | países | subdivisões |
+|---|---|---|---|---|
+| 0 | — (integral) | 0,02° | 940.899 | 642.121 |
+| 1 | 0,008° | 0,06° | 328.199 | 194.809 |
+| 2 | 0,04° | 0,25° | 83.912 | 51.858 |
+| 3 | 0,15° | 0,90° | 23.614 | 16.895 |
+| 4 | 0,45° | 2,50° | 9.545 | 8.628 |
 
-O nível 3 é construído antes do primeiro quadro; os outros entram em segundo plano.
+Só o nível 3 dos países é construído antes do primeiro quadro. O resto entra em
+segundo plano, intercalando as duas camadas, para o botão nunca abrir vazio.
+
+As duas camadas passam pelo mesmo shader, em duas chamadas de desenho — as
+subdivisões primeiro, os países por cima, para a linha mais forte vencer onde as
+duas quase se encostam.
 
 ![Europa](docs/europa.png)
 
@@ -202,15 +236,19 @@ o zoom máximo, e no arrasto ponto-a-ponto.
 
 Medido em RTX 3050 Laptop, 1038×986:
 
-| vista | ms/quadro | nível |
+| vista | só países | com subdivisões |
 |---|---|---|
-| zoom máximo (13 m) | 5,97 | 0 |
-| região (127 km) | 3,52 | 0 |
-| continente | 1,12 | 0 |
-| globo inteiro | 0,42 | 2 |
-| muito distante | 0,51 | 4 |
+| zoom máximo (13 m) | 7,5 ms | 4,9 ms |
+| região (127 km) | 2,7 ms | 4,2 ms |
+| continente | 0,9 ms | 1,5 ms |
+| globo inteiro | 0,3 ms | 0,5 ms |
 
-Primeira pintura em ~180 ms. 47,6 MB de VRAM nos cinco níveis somados.
+Primeira pintura em ~196 ms. 79 MB de VRAM com as duas camadas e todos os níveis
+(2,3 milhões de segmentos).
+
+> O zoom máximo sair mais rápido com as subdivisões ligadas é ruído de medição —
+> nessa vista quase toda a geometria cai no descarte por horizonte, e a diferença
+> está dentro da variação de clock da GPU entre as duas medidas.
 
 A renderização é sob demanda: sem input, nenhum quadro é desenhado.
 
@@ -227,11 +265,12 @@ Só precisa de Node (sem dependências). `build.mjs` é determinístico: gera
 `borders.bin` byte a byte idêntico a cada execução.
 
 ```
-src/template.html   renderizador (WebGL2 + controles), com o marcador __DATA_B64__
-tools/build.mjs     Natural Earth -> binário quantizado
-tools/pack.mjs      empacota tudo num HTML
-data/borders.bin    fronteiras codificadas (2,38 MB)
-globo.html          o resultado
+src/template.html      renderizador (WebGL2 + controles), com os marcadores de dados
+tools/build.mjs        Natural Earth -> binários quantizados
+tools/pack.mjs         empacota tudo num HTML
+data/borders.bin       países: litoral + fronteiras nacionais (2,38 MB)
+data/subdivisions.bin  divisas internas de estados/províncias (1,78 MB)
+globo.html             o resultado
 ```
 
 ---
@@ -244,6 +283,8 @@ globo.html          o resultado
 - As linhas de costa estão desenhadas. Não há oceano colorido nem sombreado — terra
   e mar são o mesmo branco — mas o contorno costeiro faz parte do desenho de cada
   país; sem ele sobrariam só as divisas terrestres soltas.
+- A cobertura do `admin_1` varia bastante por país: alguns têm subdivisões
+  detalhadas, outros têm poucas ou nenhuma. O que aparece é o que a base traz.
 - Sem inércia, sem animação de rotação, sem rótulos.
 - Precisa de WebGL2 (universal em navegadores atuais; a página avisa se faltar).
 

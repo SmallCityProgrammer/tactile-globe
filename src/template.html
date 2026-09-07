@@ -1,23 +1,23 @@
-<title>Globo Tátil</title>
+<title>Tactile Globe</title>
 <style>
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#e3e6e9}
   #gl{display:block;width:100vw;height:100vh;touch-action:none;cursor:grab}
   #gl.drag{cursor:grabbing}
   #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
        font:14px system-ui,sans-serif;color:#666}
-  #detalhe{position:fixed;right:20px;bottom:20px;-webkit-appearance:none;appearance:none;
+  #detail{position:fixed;right:20px;bottom:20px;-webkit-appearance:none;appearance:none;
        font:500 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.02em;
        padding:10px 15px;border-radius:999px;cursor:pointer;user-select:none;
        color:#5c636a;background:rgba(255,255,255,.70);border:1px solid rgba(92,99,106,.26);
        -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
        transition:background .14s,color .14s,border-color .14s}
-  #detalhe:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
-  #detalhe[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
-  #detalhe:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
+  #detail:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
+  #detail[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
+  #detail:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
 </style>
 <canvas id="gl"></canvas>
 <div id="msg"></div>
-<button id="detalhe" type="button" aria-pressed="false">estados e províncias</button>
+<button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
 <script id="geo" type="application/octet-stream">__DATA_B64__</script>
 <script id="geo2" type="application/octet-stream">__DATA2_B64__</script>
 <script>
@@ -33,12 +33,13 @@ var gl = canvas.getContext('webgl2', {
   premultipliedAlpha:false, preserveDrawingBuffer:false,
   powerPreference:'high-performance'
 });
-if(!gl){ fail('WebGL2 nao disponivel neste navegador.'); return; }
+if(!gl){ fail('WebGL2 is not available in this browser.'); return; }
 
 /* ============================================================
-   1. DADOS - varint zigzag -> cadeias de lon/lat (1e-6 grau)
+   1. DATA - zigzag varints -> chains of lon/lat at 1e-6 degree
    ============================================================ */
 var QS = 1e-6;
+var DEG = Math.PI/180;
 function decode(id){
   var bin = atob(document.getElementById(id).textContent);
   var n = bin.length, buf = new Uint8Array(n), i;
@@ -60,9 +61,9 @@ function decode(id){
 }
 
 /* ============================================================
-   2. NIVEIS DE DETALHE
-      tol  = tolerancia Douglas-Peucker (graus)
-      step = passo maximo de densificacao (graus)
+   2. LEVELS OF DETAIL
+      tol  = Douglas-Peucker tolerance (degrees)
+      step = maximum densification step (degrees)
    ============================================================ */
 var LODS = [
   { tol: 0,     step: 0.02 },
@@ -72,16 +73,61 @@ var LODS = [
   { tol: 0.45,  step: 2.50 }
 ];
 
-/* camada 0 = paises (litoral + fronteiras nacionais)
-   camada 1 = apenas as divisas internas de estados/provincias
-   Desenhadas nessa ordem inversa: as subdivisoes primeiro, os paises por
-   cima, para a linha mais forte vencer onde as duas quase se encostam. */
+/* layer 0 = countries (coastline + national borders)
+   layer 1 = internal state/province borders only
+   Drawn in reverse order — subdivisions first, countries on top — so the
+   heavier line wins wherever the two nearly touch. */
 var LAYERS = [
   { chains: decode('geo'),  cache: new Array(LODS.length),
     color: new Float32Array([0.376, 0.404, 0.427]), width: 1.15, on: true },
   { chains: decode('geo2'), cache: new Array(LODS.length),
     color: new Float32Array([0.612, 0.643, 0.667]), width: 0.90, on: false }
 ];
+
+/* ---------- spatial grid, for view culling ----------
+   Segments are bucketed by the cell of their start point and the instance
+   buffer is laid out in cell order, so any set of visible cells collapses
+   into a handful of contiguous draw ranges. Cells are ordered band-major,
+   which keeps a horizontal sweep contiguous. */
+var CELL = 4;                               // degrees
+var NLON = Math.round(360/CELL), NLAT = Math.round(180/CELL);
+var NCELL = NLON*NLAT;
+
+function cellOf(lon, lat){
+  var x = (lon + 180) % 360; if (x < 0) x += 360;
+  x = (x/CELL)|0; if (x >= NLON) x = NLON - 1;
+  var y = ((lat + 90)/CELL)|0;
+  if (y < 0) y = 0; else if (y >= NLAT) y = NLAT - 1;
+  return y*NLON + x;
+}
+
+/* bounding cap per cell: centre direction + angular radius, derived from the
+   cell's lon/lat rectangle sampled along its boundary */
+var cellDir = new Float32Array(NCELL*3);
+var cellCos = new Float32Array(NCELL);
+var cellSin = new Float32Array(NCELL);
+(function(){
+  var c = [0,0,0], p = [0,0,0];
+  for (var y = 0; y < NLAT; y++){
+    var la0 = y*CELL - 90, la1 = la0 + CELL;
+    for (var x = 0; x < NLON; x++){
+      var lo0 = x*CELL - 180, lo1 = lo0 + CELL, i = y*NLON + x;
+      sph((lo0+lo1)/2, (la0+la1)/2, c);
+      var worst = 1;
+      for (var u = 0; u <= 8; u++){
+        for (var v = 0; v <= 8; v++){
+          if (u > 0 && u < 8 && v > 0 && v < 8) continue;   // boundary only
+          sph(lo0 + (lo1-lo0)*u/8, la0 + (la1-la0)*v/8, p);
+          var d = c[0]*p[0] + c[1]*p[1] + c[2]*p[2];
+          if (d < worst) worst = d;
+        }
+      }
+      var r = Math.acos(Math.max(-1, Math.min(1, worst))) + 0.004;   // safety slack
+      cellDir[3*i] = c[0]; cellDir[3*i+1] = c[1]; cellDir[3*i+2] = c[2];
+      cellCos[i] = Math.cos(r); cellSin[i] = Math.sin(r);
+    }
+  }
+})();
 
 function simplify(ch, tolQ){
   var n = ch.length/2;
@@ -111,8 +157,6 @@ function simplify(ch, tolQ){
   return out;
 }
 
-var DEG = Math.PI/180;
-
 function subCount(ax, ay, bx, by, step){
   var dx = (bx-ax)*QS, dy = (by-ay)*QS;
   if (dx > 180) dx -= 360; else if (dx < -180) dx += 360;
@@ -122,7 +166,7 @@ function subCount(ax, ay, bx, by, step){
   return k < 1 ? 1 : k;
 }
 
-/* lon/lat em graus -> ponto na esfera unitaria (leste = direita, norte = cima) */
+/* lon/lat in degrees -> point on the unit sphere (east = right, north = up) */
 function sph(lon, lat, o){
   var la = lat*DEG, lo = lon*DEG, cl = Math.cos(la);
   o[0] = cl*Math.cos(lo); o[1] = Math.sin(la); o[2] = -cl*Math.sin(lo);
@@ -134,40 +178,58 @@ function buildLOD(chains, idx){
 
   for (c = 0; c < chains.length; c++) simp[c] = simplify(chains[c], tolQ);
 
-  var segs = 0;
+  /* pass 1 - count sub-segments per cell (no trig needed) */
+  var segs = 0, counts = new Int32Array(NCELL), q, t, k, lonA, latA, dlon, dlat, ch;
   for (c = 0; c < simp.length; c++){
-    s = simp[c]; n = s.length/2;
-    for (i = 0; i+1 < n; i++) segs += subCount(s[2*i], s[2*i+1], s[2*i+2], s[2*i+3], step);
+    ch = simp[c]; n = ch.length/2;
+    if (n < 2) continue;
+    for (i = 0; i+1 < n; i++){
+      lonA = ch[2*i]*QS; latA = ch[2*i+1]*QS;
+      dlon = ch[2*i+2]*QS - lonA;
+      if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
+      dlat = ch[2*i+3]*QS - latA;
+      k = subCount(ch[2*i], ch[2*i+1], ch[2*i+2], ch[2*i+3], step);
+      for (q = 0; q < k; q++){
+        t = q/k;
+        counts[cellOf(lonA + dlon*t, latA + dlat*t)]++;
+        segs++;
+      }
+    }
   }
 
-  var data = new Float32Array(9*segs), w = 0;
-  var A = [0,0,0], B = [0,0,0];
+  /* prefix sums -> where each cell's block starts */
+  var start = new Int32Array(NCELL + 1), cursor = new Int32Array(NCELL), acc = 0;
+  for (i = 0; i < NCELL; i++){ start[i] = acc; cursor[i] = acc; acc += counts[i]; }
+  start[NCELL] = acc;
 
+  /* pass 2 - emit each sub-segment into its cell's block */
+  var data = new Float32Array(9*segs), w, d, v, hi;
+  var A = [0,0,0], B = [0,0,0];
   for (c = 0; c < simp.length; c++){
-    var ch = simp[c]; n = ch.length/2;
+    ch = simp[c]; n = ch.length/2;
     if (n < 2) continue;
     sph(ch[0]*QS, ch[1]*QS, A);
     for (i = 0; i+1 < n; i++){
-      var lonA = ch[2*i]*QS, latA = ch[2*i+1]*QS;
-      var dlon = ch[2*i+2]*QS - lonA;
+      lonA = ch[2*i]*QS; latA = ch[2*i+1]*QS;
+      dlon = ch[2*i+2]*QS - lonA;
       if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
-      var dlat = ch[2*i+3]*QS - latA;
-      var k = subCount(ch[2*i], ch[2*i+1], ch[2*i+2], ch[2*i+3], step);
-      for (var q = 1; q <= k; q++){
-        var t = q/k;
+      dlat = ch[2*i+3]*QS - latA;
+      k = subCount(ch[2*i], ch[2*i+1], ch[2*i+2], ch[2*i+3], step);
+      for (q = 1; q <= k; q++){
+        t = q/k;
         sph(lonA + dlon*t, latA + dlat*t, B);
-        for (var d = 0; d < 3; d++){
-          var v = A[d], hi = Math.fround(v);
+        w = 9*cursor[cellOf(lonA + dlon*(q-1)/k, latA + dlat*(q-1)/k)]++;
+        for (d = 0; d < 3; d++){
+          v = A[d]; hi = Math.fround(v);
           data[w+d]   = hi;
           data[w+3+d] = Math.fround(v - hi);
           data[w+6+d] = Math.fround(B[d] - v);
         }
-        w += 9;
         A[0] = B[0]; A[1] = B[1]; A[2] = B[2];
       }
     }
   }
-  return { count: segs, data: data };
+  return { count: segs, data: data, start: start };
 }
 
 /* ============================================================
@@ -196,7 +258,7 @@ function U(p){
   return m;
 }
 
-/* passe 1: esfera analitica - interseccao exata, sem facetas em nenhum zoom */
+/* pass 1: analytic sphere - exact intersection, no faceting at any zoom */
 var SPH_VS = '#version 300 es\n' + [
 'out vec2 vNdc;',
 'void main(){',
@@ -232,8 +294,8 @@ var SPH_FS = '#version 300 es\n' + [
 '  frag = vec4(mix(bg, vec3(shade), cov), 1.0);',
 '}'].join('\n');
 
-/* passe 2: linhas instanciadas, largura constante em pixels,
-   posicoes em precisao dupla emulada (hi/lo relativo ao olho) */
+/* pass 2: instanced lines, constant width in pixels, positions in emulated
+   double precision (hi/lo split, subtracted relative to the eye) */
 var LIN_VS = '#version 300 es\n' + [
 'precision highp float;',
 'layout(location=0) in vec3 aHi;',
@@ -322,12 +384,13 @@ function uploadLOD(L, idx){
     gl.vertexAttribDivisor(i, 1);
   }
   gl.bindVertexArray(null);
-  L.cache[idx] = { vao: vao, count: b.count };
+  L.cache[idx] = { vao: vao, vbo: vbo, count: b.count, start: b.start,
+                   margin: LODS[idx].step*1.5*DEG };
   return L.cache[idx];
 }
 
 /* ============================================================
-   4. CAMERA - todo o estado em precisao dupla no CPU
+   4. CAMERA - all state kept in double precision on the CPU
    ============================================================ */
 var FOV = 45*DEG, TANHF = Math.tan(FOV/2);
 var H_MIN = 2.0e-6, H_MAX = 24.0;
@@ -385,8 +448,8 @@ function rayFor(px, py){
   return norm(rayD);
 }
 
-/* ponto da esfera sob um pixel; fora do disco devolve o ponto mais proximo
-   0 = atras da camera, 1 = fora do disco, 2 = acerto real */
+/* sphere point under a pixel; outside the disc returns the nearest point
+   0 = behind the camera, 1 = outside the disc, 2 = real hit */
 function pick(px, py, out){
   var d = rayFor(px, py);
   var ct = -(d[0]*camU[0] + d[1]*camU[1] + d[2]*camU[2]);
@@ -402,21 +465,21 @@ function pick(px, py, out){
   return hit ? 2 : 1;
 }
 
-/* Coloca o ponto G do mundo exatamente sob o pixel (px,py), resolvendo
-   lon/lat em forma fechada. Com a camera "norte para cima" sobram 2 graus
-   de liberdade para 2 restricoes, entao a solucao e exata - sem iteracao
-   e sem deriva acumulada ao arrastar ou dar zoom. */
+/* Puts the world point G exactly under pixel (px,py), solving lon/lat in
+   closed form. A north-up camera has exactly 2 degrees of freedom for 2
+   constraints, so the solution is exact — no iteration, and no drift
+   accumulating across a drag or a zoom. */
 function place(G, px, py){
   var cw = canvas.clientWidth, chh = canvas.clientHeight;
   var nx = (px/cw)*2 - 1, ny = 1 - (py/chh)*2;
   var dx = nx*TANHF*(cw/chh), dy = ny*TANHF, dz = -1;
   var dl = Math.sqrt(dx*dx + dy*dy + 1); dx/=dl; dy/=dl; dz/=dl;
 
-  // interseccao com a esfera nas coordenadas da camera (centro em (0,0,-R))
+  // sphere intersection in camera coordinates (centre at (0,0,-R))
   var bb = -R*dz;
   if (bb <= 0) return false;
   var disc = bb*bb - C2;
-  var t = disc >= 0 ? C2/(bb + Math.sqrt(disc)) : bb;   // fora do disco: ponto tangente
+  var t = disc >= 0 ? C2/(bb + Math.sqrt(disc)) : bb;   // outside the disc: tangent point
   var a = t*dx, b = t*dy, c = t*dz + R;
   var gl2 = Math.sqrt(a*a + b*b + c*c);
   if (gl2 < 1e-12) return false;
@@ -428,7 +491,7 @@ function place(G, px, py){
   var sv = G[1]/rho, psi = Math.atan2(b, c), phi;
   var LIM = 89.9999*DEG, cur = lat*DEG;
   if (sv >= 1 || sv <= -1){
-    phi = (sv > 0 ? Math.PI/2 : -Math.PI/2) - psi;      // inalcancavel: o mais proximo
+    phi = (sv > 0 ? Math.PI/2 : -Math.PI/2) - psi;      // unreachable: closest possible
   } else {
     var as = Math.asin(sv), best = null, bd = Infinity;
     var cand = [as - psi, Math.PI - as - psi];
@@ -446,7 +509,7 @@ function place(G, px, py){
   if (phi >  LIM) phi =  LIM;
   if (phi < -LIM) phi = -LIM;
 
-  // resolve lon a partir das componentes x,z
+  // solve lon from the x,z components
   var cp = Math.cos(phi), sp = Math.sin(phi);
   var K = c*cp - b*sp, den = a*a + K*K;
   if (den < 1e-18) return false;
@@ -457,7 +520,7 @@ function place(G, px, py){
 }
 
 /* ============================================================
-   5. INTERACAO - arrastar para girar, roda do mouse para zoom
+   5. INTERACTION - drag to rotate, wheel to zoom
    ============================================================ */
 var pointers = new Map();
 var grabG = null, pinchDist = 0, anchor = null;
@@ -530,13 +593,13 @@ canvas.addEventListener('wheel', function(e){
   requestRender();
 }, { passive: false });
 
-/* mantem o ponto sob o cursor travado enquanto o zoom acontece */
+/* keeps the point under the cursor pinned while the zoom eases */
 function reanchor(){
   if (anchor) place(anchor.g, anchor.px, anchor.py);
 }
 
 /* ============================================================
-   6. LACO DE RENDERIZACAO
+   6. RENDER LOOP
    ============================================================ */
 var dpr = 1, vpW = 0, vpH = 0;
 function resize(){
@@ -560,7 +623,7 @@ function pickLOD(L){
     if (LODS[i].tol <= 0.8*degPerPx){ best = i; break; }
   }
   if (L.cache[best]) return L.cache[best];
-  for (i = best; i >= 0; i--) if (L.cache[i]) return L.cache[i];   // prefere detalhe a mais
+  for (i = best; i >= 0; i--) if (L.cache[i]) return L.cache[i];   // prefer too much detail
   for (i = best; i < LODS.length; i++) if (L.cache[i]) return L.cache[i];
   return null;
 }
@@ -603,8 +666,79 @@ function frame(ts){
   if (!rafId) last = 0;
 }
 
+/* ---------- view culling ----------
+   The instance buffer is laid out in cell order, so the visible cells
+   collapse into a few contiguous ranges. Each range is drawn by re-pointing
+   the instance attributes at its byte offset — WebGL2 has no baseInstance. */
+var MAXR = 64;
+var rngS = new Int32Array(MAXR), rngC = new Int32Array(MAXR), rngN = 0;
+var capTmp = [0,0,0], drawn = 0;
+
+/* angular radius, about the sub-camera point, of a cap containing
+   everything currently on screen */
+function viewCapRadius(){
+  var thH = Math.acos(Math.max(-1, Math.min(1, 1/R)));
+  var W = canvas.clientWidth, H = canvas.clientHeight;
+  var pts = [0,0, W,0, 0,H, W,H, W/2,0, W/2,H, 0,H/2, W,H/2];
+  var maxA = 0, i, d, a;
+  for (i = 0; i < pts.length; i += 2){
+    if (pick(pts[i], pts[i+1], capTmp) !== 2) return thH;   // sees past the limb
+    d = capTmp[0]*camU[0] + capTmp[1]*camU[1] + capTmp[2]*camU[2];
+    a = Math.acos(Math.max(-1, Math.min(1, d)));
+    if (a > maxA) maxA = a;
+  }
+  maxA = maxA*1.06 + 0.003;
+  return maxA < thH ? maxA : thH;
+}
+
+/* false = culling not worth it, draw the whole buffer */
+function buildRanges(lod, viewRho){
+  var rho = viewRho + lod.margin;
+  if (rho > 0.55) return false;
+  var cr = Math.cos(rho), sr = Math.sin(rho);
+  var span = rho/DEG + CELL;
+  var y0 = ((lat - span + 90)/CELL)|0, y1 = ((lat + span + 90)/CELL)|0;
+  if (y0 < 0) y0 = 0;
+  if (y1 >= NLAT) y1 = NLAT - 1;
+  var st = lod.start, n = 0, curS = -1, curE = -1, y, x, base, ci, a, b, d;
+  for (y = y0; y <= y1; y++){
+    base = y*NLON;
+    for (x = 0; x < NLON; x++){
+      ci = base + x;
+      a = st[ci]; b = st[ci+1];
+      if (a === b) continue;                                  // empty cell
+      d = cellDir[3*ci]*camU[0] + cellDir[3*ci+1]*camU[1] + cellDir[3*ci+2]*camU[2];
+      if (d < cr*cellCos[ci] - sr*cellSin[ci]) continue;      // cap misses the view
+      if (curS < 0){ curS = a; curE = b; }
+      else if (a - curE <= 1024){ curE = b; }                 // bridge small gaps
+      else {
+        if (n === MAXR) return false;
+        rngS[n] = curS; rngC[n] = curE - curS; n++;
+        curS = a; curE = b;
+      }
+    }
+  }
+  if (curS >= 0){
+    if (n === MAXR) return false;
+    rngS[n] = curS; rngC[n] = curE - curS; n++;
+  }
+  rngN = n;
+  return true;
+}
+
+function drawRange(first, count){
+  var off = first*36;
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, off);
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, off + 12);
+  gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, off + 24);
+  gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
+  drawn += count;
+}
+
 function draw(){
   var aspect = vpW/vpH;
+  drawn = 0;
+  var viewRho = viewCapRadius();
 
   gl.disable(gl.BLEND);
   gl.bindVertexArray(emptyVao);
@@ -624,7 +758,7 @@ function draw(){
   gl.uniform1f(uSph.uHOverR, h/R);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-  var ORDER = [1, 0];                      // subdivisoes primeiro, paises por cima
+  var ORDER = [1, 0];                      // subdivisions first, countries on top
   var started = false, li, L, lod, halfW;
   for (li = 0; li < ORDER.length; li++){
     L = LAYERS[ORDER[li]];
@@ -655,18 +789,24 @@ function draw(){
     gl.uniform1f(uLin.uHalfW, halfW);
     gl.uniform3fv(uLin.uLineColor, L.color);
     gl.bindVertexArray(lod.vao);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, lod.count);
+    gl.bindBuffer(gl.ARRAY_BUFFER, lod.vbo);
+    if (buildRanges(lod, viewRho)){
+      for (var ri = 0; ri < rngN; ri++) drawRange(rngS[ri], rngC[ri]);
+    } else {
+      rngN = 0;
+      drawRange(0, lod.count);
+    }
   }
   gl.bindVertexArray(null);
 }
 
 resize();
 updateCam();
-uploadLOD(LAYERS[0], 3);          // nivel grosseiro dos paises antes do 1o quadro
+uploadLOD(LAYERS[0], 3);          // coarse country level before the first frame
 requestRender();
 
-/* o resto entra em segundo plano; as subdivisoes ficam prontas cedo para
-   o botao nunca abrir vazio */
+/* the rest builds in the background; subdivisions land early so the button
+   never opens onto an empty globe */
 var pending = [[0,2],[1,3],[0,1],[1,2],[0,0],[1,1],[1,0],[0,4],[1,4]];
 (function next(){
   if (!pending.length) return;
@@ -674,8 +814,8 @@ var pending = [[0,2],[1,3],[0,1],[1,2],[0,0],[1,1],[1,0],[0,4],[1,4]];
   setTimeout(function(){ uploadLOD(LAYERS[j[0]], j[1]); requestRender(); next(); }, 30);
 })();
 
-/* ---- botao de detalhamento ---- */
-var btn = document.getElementById('detalhe');
+/* ---- detail toggle ---- */
+var btn = document.getElementById('detail');
 function setDetail(on){
   LAYERS[1].on = on;
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -690,7 +830,7 @@ window.__globe = {
   render: function(){ resize(); updateCam(); draw(); },
   info: function(){
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
-             detalhe: LAYERS[1].on,
+             detail: LAYERS[1].on, drawn: drawn, ranges: rngN,
              lods: LAYERS.map(function(L){ return L.cache.map(function(c){ return c ? c.count : null; }); }),
              vp: [vpW, vpH], dpr: dpr };
   },
@@ -698,7 +838,7 @@ window.__globe = {
     if (o.lon !== undefined) lon = o.lon;
     if (o.lat !== undefined) lat = o.lat;
     if (o.h   !== undefined) logH = logHTarget = clampLog(Math.log(o.h));
-    if (o.detalhe !== undefined) setDetail(!!o.detalhe);
+    if (o.detail !== undefined) setDetail(!!o.detail);
     anchor = null; updateCam(); requestRender();
   }
 };

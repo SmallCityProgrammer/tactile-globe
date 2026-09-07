@@ -1,23 +1,23 @@
 /*
  * build.mjs — Natural Earth 1:10m  ->  data/*.bin
  *
- * Gera duas camadas:
+ * Produces two layers:
  *
- *   borders.bin        paises: litoral + fronteiras nacionais  (admin_0)
- *   subdivisions.bin   apenas as divisas internas              (admin_1)
+ *   borders.bin        countries: coastline + national borders  (admin_0)
+ *   subdivisions.bin   internal state/province borders only     (admin_1)
  *
- * Os poligonos de estados do admin_1 tambem contem litoral e fronteiras
- * nacionais. As duas bases compartilham a mesma topologia — 99,6% dos
- * segmentos do admin_0 aparecem bit a bit identicos no admin_1 — entao da
- * para subtrair por chave exata e ficar so com o que e realmente interno.
+ * The admin_1 polygons also carry coastline and national borders. Both
+ * datasets are built on the same topology — 99.6% of admin_0 segments appear
+ * bit-for-bit identical in admin_1 — so the overlap can be subtracted by
+ * exact key, with no tolerance and no proximity heuristic.
  *
- * Em ambas as camadas:
- *   1. quantiza para 1e-6 grau (~11 cm)
- *   2. remove segmentos duplicados (divisa compartilhada aparece em cada lado)
- *   3. remove arestas artificiais (fecho polar, costura no antimeridiano)
- *   4. reagrupa em cadeias e grava como varint zigzag de deltas
+ * For both layers:
+ *   1. quantize to 1e-6 degree (~11 cm)
+ *   2. drop duplicate segments (a shared border appears once per side)
+ *   3. drop artificial edges (polar closure, antimeridian seam)
+ *   4. re-chain and encode as zigzag varints over deltas
  *
- * uso:  node tools/build.mjs
+ * usage:  node tools/build.mjs
  */
 import fs from 'fs';
 import path from 'path';
@@ -27,7 +27,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = path.join(ROOT, 'data');
 const BASE = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/';
 
-const Q = 1e6;                        // quantizacao: 1e-6 grau ~= 0.11 m
+const Q = 1e6;                        // quantization: 1e-6 degree ~= 0.11 m
 const POLAR = Math.round(89.9 * Q);
 const SEAM = Math.round(180 * Q);
 
@@ -36,15 +36,15 @@ fs.mkdirSync(DATA, { recursive: true });
 async function source(name, mb) {
   const file = path.join(DATA, name);
   if (!fs.existsSync(file)) {
-    console.log(`baixando ${name} (~${mb} MB)...`);
+    console.log(`downloading ${name} (~${mb} MB)...`);
     const res = await fetch(BASE + name);
-    if (!res.ok) throw new Error('falha no download: HTTP ' + res.status);
+    if (!res.ok) throw new Error('download failed: HTTP ' + res.status);
     fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
   }
   return file;
 }
 
-/* aneis de todos os poligonos, quantizados, sem pontos repetidos */
+/* rings of every polygon, quantized, with repeated points dropped */
 function rings(file) {
   const gj = JSON.parse(fs.readFileSync(file, 'utf8'));
   const out = [];
@@ -68,15 +68,15 @@ function rings(file) {
   return out;
 }
 
-/* chave nao-direcional: A->B e B->A sao o mesmo segmento */
+/* undirected key: A->B and B->A are the same segment */
 const key = (ax, ay, bx, by) =>
   (ax < bx || (ax === bx && ay <= by))
     ? ax + ',' + ay + ',' + bx + ',' + by
     : bx + ',' + by + ',' + ax + ',' + ay;
 
-/* Percorre cada anel em ordem e corta a cadeia sempre que um segmento e
-   descartado — mesmo resultado de construir a topologia inteira, sem
-   precisar indexar vertices. `exclude` remove segmentos de outra camada. */
+/* Walks each ring in order and cuts the chain wherever a segment is
+   dropped — same result as building the full topology, without indexing
+   vertices. `exclude` removes segments belonging to another layer. */
 function chainsOf(qrings, exclude) {
   const seen = new Set();
   const chains = [];
@@ -111,7 +111,7 @@ function chainsOf(qrings, exclude) {
   return { chains, seen, kept, dupes, artificial, shared };
 }
 
-/* varint zigzag sobre deltas consecutivos */
+/* zigzag varints over consecutive deltas */
 function encode(chains) {
   const buf = [];
   const pushV = v => {
@@ -138,26 +138,26 @@ function report(label, out, r, bytes) {
   console.log([
     ``,
     `${label}`,
-    `  segmentos unicos    ${r.kept}`,
-    `    duplicados        ${r.dupes}`,
-    `    artificiais       ${r.artificial}`,
-    r.shared ? `    ja em borders.bin ${r.shared}` : null,
-    `  cadeias             ${r.chains.length}`,
-    `  pontos              ${pts}`,
-    `  ${out.padEnd(18)}${(bytes / 1048576).toFixed(2)} MB  (${(bytes / pts).toFixed(2)} bytes/ponto)`
+    `  unique segments     ${r.kept}`,
+    `    duplicates        ${r.dupes}`,
+    `    artificial        ${r.artificial}`,
+    r.shared ? `    already in layer 1  ${r.shared}` : null,
+    `  chains              ${r.chains.length}`,
+    `  points              ${pts}`,
+    `  ${out.padEnd(24)}${(bytes / 1048576).toFixed(2)} MB  (${(bytes / pts).toFixed(2)} bytes/point)`
   ].filter(Boolean).join('\n'));
 }
 
-/* ---- camada 1: paises ---- */
+/* ---- layer 1: countries ---- */
 const f0 = await source('ne_10m_admin_0_countries.geojson', 13);
 const r0 = chainsOf(rings(f0), null);
 const b0 = encode(r0.chains);
 fs.writeFileSync(path.join(DATA, 'borders.bin'), b0);
-report('paises (admin_0)', 'data/borders.bin', r0, b0.length);
+report('countries (admin_0)', 'data/borders.bin', r0, b0.length);
 
-/* ---- camada 2: subdivisoes, subtraindo o que ja esta na camada 1 ---- */
+/* ---- layer 2: subdivisions, subtracting whatever layer 1 already has ---- */
 const f1 = await source('ne_10m_admin_1_states_provinces.geojson', 40);
 const r1 = chainsOf(rings(f1), r0.seen);
 const b1 = encode(r1.chains);
 fs.writeFileSync(path.join(DATA, 'subdivisions.bin'), b1);
-report('subdivisoes (admin_1)', 'data/subdivisions.bin', r1, b1.length);
+report('subdivisions (admin_1)', 'data/subdivisions.bin', r1, b1.length);

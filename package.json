@@ -1,7 +1,7 @@
 {
   "name": "tactile-globe",
   "version": "1.0.0",
-  "description": "Globo terrestre branco com as divisas dos paises em cinza, em arquivo unico offline",
+  "description": "A white globe with country and state borders in grey, as a single offline HTML file",
   "private": true,
   "type": "module",
   "scripts": {

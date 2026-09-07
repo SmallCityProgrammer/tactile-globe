@@ -1,14 +1,14 @@
 /*
- * pack.mjs — src/template.html + data/borders.bin  ->  globo.html
+ * pack.mjs — src/template.html + data/*.bin  ->  globo.html
  *
- * Embute o binario como base64 dentro de uma tag <script type="application/
- * octet-stream">. O alfabeto base64 nao contem '<', entao nao ha como o
- * conteudo fechar a tag por acidente.
+ * Embeds each binary as base64 inside a <script type="application/octet-
+ * stream"> tag. The base64 alphabet has no '<', so the payload cannot close
+ * the tag by accident.
  *
- * O resultado e um unico arquivo, sem nenhuma requisicao externa — abre
- * direto por file:// sem servidor.
+ * The result is a single file with no external requests — it opens straight
+ * from file:// with no server.
  *
- * uso:  node tools/pack.mjs
+ * usage:  node tools/pack.mjs
  */
 import fs from 'fs';
 import path from 'path';
@@ -27,11 +27,11 @@ let dados = 0;
 
 for (const [marker, file] of BINS) {
   if (!fs.existsSync(file)) {
-    console.error(`${path.relative(ROOT, file)} nao existe — rode antes:  node tools/build.mjs`);
+    console.error(`${path.relative(ROOT, file)} is missing — run first:  node tools/build.mjs`);
     process.exit(1);
   }
   if (!out.includes(marker)) {
-    console.error(`src/template.html nao tem o marcador ${marker}`);
+    console.error(`src/template.html has no placeholder ${marker}`);
     process.exit(1);
   }
   const b64 = fs.readFileSync(file).toString('base64');
@@ -39,8 +39,8 @@ for (const [marker, file] of BINS) {
   out = out.replace(marker, b64);
 }
 
-// checagem: o JS embutido tem que ser sintaticamente valido
+// sanity check: the embedded JS must parse
 new Function(out.match(/<script>\n([\s\S]*)<\/script>/)[1]);
 
 fs.writeFileSync(OUT, out, 'utf8');
-console.log(`globo.html  ${(out.length / 1048576).toFixed(2)} MB  (dados: ${(dados / 1048576).toFixed(2)} MB base64)`);
+console.log(`globo.html  ${(out.length / 1048576).toFixed(2)} MB  (data: ${(dados / 1048576).toFixed(2)} MB base64)`);

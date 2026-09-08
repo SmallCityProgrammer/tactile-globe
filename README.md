@@ -1,10 +1,11 @@
 # Tactile Globe
 
-A white globe with country borders in grey, and nothing else. No oceans, no
-relief, no labels. Scroll to zoom, drag to spin. One button adds the state and
-province borders of every country.
+A white globe with country borders in grey. No oceans, no labels.
+Scroll to zoom, drag to spin. Buttons add continental relief, take the internal
+borders away, add the state and province borders of every country, or fill the
+Napoleonic Empire at its height in navy.
 
-A single 5.6 MB file with no external dependencies — it opens from `file://`,
+A single 8.0 MB file with no external dependencies — it opens from `file://`,
 by double-click, offline.
 
 ![The globe](docs/globo.png)
@@ -19,7 +20,10 @@ Open `globo.html`. That's it.
 |---|---|
 | scroll | zoom, anchored on the point under the cursor |
 | drag | spins the globe, the grabbed point stays under the cursor |
-| `states & provinces` button (or the `d` key) | toggles the internal borders |
+| `relief` button (or the `r` key) | shades the continents by elevation |
+| `land borders` button (or the `b` key) | hides the internal borders, keeping the coastline |
+| `states & provinces` button (or the `d` key) | toggles the subdivisions |
+| `napoleonic empire` button (or the `n` key) | toggles the filled region |
 
 Zoom runs from the whole globe small on screen down to ~13 m of altitude.
 
@@ -85,7 +89,22 @@ close, deltas almost always fit in 1–2 bytes: **5.21 bytes per point**.
 > entropy, and it was not worth a `DecompressionStream` dependency. Plain base64
 > it is.
 
-Result: 4,324 chains, 479,106 points, 474,782 unique segments.
+Result: 479,106 points and 474,782 unique segments.
+
+### Splitting coastline from land border
+
+The occurrence count above is not thrown away after deduplication, because it
+already says which is which:
+
+> a segment carried by **two** country polygons is a border between them; one
+> carried by a single polygon is coast
+
+So the layer splits, exactly and for free, into **406,165** coastline segments
+(4,264 chains, 2.04 MB) and **68,617** land border segments (234 chains,
+0.34 MB) — and the two add back to the 474,782. That is what the `land borders`
+button switches off, leaving the continents' outline standing:
+
+![Outline and relief only](docs/contorno.png)
 
 ### The second layer: states and provinces
 
@@ -113,6 +132,131 @@ button toggles, drawn in a lighter grey and thinner than the country layer so th
 hierarchy stays readable: a national border outweighs a state border.
 
 ![Brazilian states and neighbouring departments](docs/estados.png)
+
+### The third layer: the Napoleonic Empire
+
+A filled region rather than lines: the empire at its greatest extent in 1812 —
+the French departments, and the client states run by Napoleon or his family.
+Prussia, Austria and Denmark are out; they were beaten and made to sign, but
+they stayed sovereign. So is anything taken and lost again — Egypt in 1798,
+Portugal in 1807, Moscow in 1812.
+
+1812 borders survive in no modern dataset, so the region is approximated by
+present-day ones: whole countries where the fit is good, `admin_1`
+subdivisions where it is not — Germany without Brandenburg and Berlin, Poland
+without Prussian Silesia and Pomerania, the four Austrian provinces that went
+to Bavaria and to Illyria, Croatia west and south of the Sava. It is a
+44-piece approximation of a border that moved every year; the shape is right
+to about a province.
+
+![The Napoleonic Empire in 1812](docs/imperio.png)
+
+The renderer fills it by **even-odd parity**, which turns out to matter more
+than it sounds, because it makes the layer a bag of closed rings with set
+algebra for free:
+
+> a country, followed by a subdivision inside it, **is** that country minus
+> the subdivision
+
+Nothing is clipped and no polygons are intersected. Every partial country is
+written as its `admin_0` outline followed by the pieces to remove, which also
+keeps each international border on `admin_0` geometry, bit-identical to its
+neighbour's, and confines the two datasets' 0.4% disagreement to inland cuts
+where nothing lines up against it.
+
+**Filling without triangulating.** One instance per boundary segment, each
+drawing the triangle *(point under the camera, A, B)*, XORed into the stencil
+buffer. Around a closed ring those triangles cancel in pairs along every
+interior edge — whatever those edges do in space — and what survives is
+exactly the ring's even-odd interior. So there is no triangulation, and, more
+to the point, **no tessellation error**: the fill's outline is the boundary
+itself at full precision, not a piecewise approximation of it. A triangulated
+fill would have had to subdivide every interior edge to keep the chords from
+sinking through the sphere; this one has no interior edges that matter.
+
+The cancellation is exact only if the two triangles meeting at a point agree
+on it to the last bit. Points are stored once and `B` is read from the same
+buffer one point further along — the attributes alias the same bytes — so `A`
+of one instance and `B` of the previous are the same 24 bytes. Computing `B`
+from a delta, the way the line layer does, would leave them an ulp apart and
+open a hairline along every ray from the apex.
+
+**The horizon** falls out of the projection instead of being clipped. A point
+on the far side is slid along its meridian from the camera onto the horizon
+circle; consecutive points keep their order around it, so the fan still traces
+the visible part of the region, and a region that surrounds the camera closes
+around the whole disc on its own. Every point of the sphere and of its
+interior sits at `z ≤ -h` in view space, so nothing is ever cut by the near
+plane either — which matters, because a fan triangle clipped by the near plane
+would stop cancelling.
+
+The colour comes from **running the sphere shader a second time** with a navy
+albedo, where the stencil came out odd. That is what gives the fill the
+globe's own shading and its exact analytic silhouette at the limb, for the
+cost of one full-screen pass.
+
+**The frontier.** A stencil is one bit per pixel, so the fill's edge is hard.
+Multisampling would fix it, at the cost of running the whole frame at 4
+samples: measured A/B, that is free where little of the screen is covered and
+up to ~1 ms where it is, taking the heaviest frame from 1.5 ms to 3.1 ms. So
+instead the region's outline is drawn as a line, in the fill's own colour, and
+the line shader's analytic coverage smooths the edge — which costs almost
+nothing, and produces the empire's frontier as a thing in its own right.
+
+That outline is not the union of the rings' edges. Where two rings run along
+the same line the parity is the same on both sides, so the stretch is
+interior, not frontier: France and Belgium share a border and both are in,
+Germany and Brandenburg share the piece of the Polish border where one adds
+and the other takes away. Both are the same rule — **an edge carried by an
+even number of rings is not an edge** — which is the deduplication of
+`build.mjs`, counted rather than flagged. Of 25,768 segments, 13,494 are
+interior and drop out.
+
+**Levels of detail by clearance, not by pixels.** The fan cannot be
+view-culled the way the lines are: drop one segment and the parity is wrong
+everywhere. But an off-screen segment still costs a wedge running clear across
+the screen, so a boundary that is far away is both the expensive case and the
+one whose detail cannot be seen. The cells the boundary occupies are known,
+which bounds from below how far the nearest piece of it is; a level whose
+simplification cannot move the boundary that far is indistinguishable from the
+exact one. Zoomed in over Paris that takes the fan from 41,443 instances to
+889.
+
+---
+
+### Relief
+
+Elevation is the one thing here that cannot be a vector. It comes from NASA's
+GEBCO-derived raster, 21600x10800 8-bit greyscale, box-averaged down 4x to
+5400x2700 — about 7.4 km per pixel at the equator.
+
+That source has a convenient encoding: 0 is sea level *and everything below it*.
+The ocean is therefore already flat, no land mask is needed, and 67% of the image
+is a single constant — which is why the result is 1.60 MB rather than the several
+megabytes a full-range DEM of that size would cost. It is written back out as a
+greyscale PNG, so the browser decodes it natively and no JavaScript decoder ships.
+
+Shading happens in the sphere's fragment shader, which already has the surface
+normal — and the raster is equirectangular, so the normal *is* the lookup. Four
+taps give the gradient, the local normal is tilted by it, and a fixed north-west
+light does the rest. Cost: **0.01-0.04 ms per frame**.
+
+Two details matter more than they look:
+
+- **The mip level is chosen and fetched explicitly.** Letting the hardware pick
+  it would collapse two neighbouring taps onto the same texel under minification,
+  and the relief would fade out exactly when the whole globe is in view. The
+  sampling offset and the level are derived together from the on-screen texel
+  footprint, with the longitude derivative unwrapped so the antimeridian does not
+  read as an infinite gradient.
+- **It fades out below roughly 8x magnification.** Past that it is blur
+  pretending to be terrain, while the vector lines beside it stay sharp. Relief
+  is a continental-scale statement here; it is not there to be zoomed into.
+
+Because the filled region runs through the same sphere shader, it picks up the
+relief for free — the Alps and the Pyrenees read straight through the navy.
+
+![Relief in the Alps](docs/relevo-alpes.png)
 
 ---
 
@@ -192,13 +336,13 @@ Five levels, simplified with Douglas–Peucker at load time and chosen by angula
 resolution per pixel. Without this, the globe seen from far away turns into a
 dark smear of overlapping lines.
 
-| level | tolerance | step | countries | subdivisions |
-|---|---|---|---|---|
-| 0 | — (full) | 0.02° | 940,899 | 642,121 |
-| 1 | 0.008° | 0.06° | 328,199 | 194,809 |
-| 2 | 0.04° | 0.25° | 83,912 | 51,858 |
-| 3 | 0.15° | 0.90° | 23,614 | 16,895 |
-| 4 | 0.45° | 2.50° | 9,545 | 8,628 |
+| level | tolerance | step | coastlines | land borders | subdivisions |
+|---|---|---|---|---|---|
+| 0 | — (full) | 0.02° | 799,957 | 140,942 | 642,121 |
+| 1 | 0.008° | 0.06° | 280,826 | 47,374 | 194,809 |
+| 2 | 0.04° | 0.25° | 72,112 | 11,810 | 51,858 |
+| 3 | 0.15° | 0.90° | 20,313 | 3,320 | 16,895 |
+| 4 | 0.45° | 2.50° | 8,376 | 1,201 | 8,628 |
 
 Only level 3 of the country layer is built before the first frame. The rest
 builds in the background, interleaving the two layers, so the button never opens
@@ -291,6 +435,24 @@ Measured on an RTX 3050 Laptop at 1280×860, best of 5 runs of 30 frames:
 First paint at ~196 ms. 79 MB of VRAM for both layers across all levels
 (2.3 million segments).
 
+The empire layer, measured the same way, best of 8 runs of 30 frames:
+
+| view | without | with | added | fan instances |
+|---|---|---|---|---|
+| whole globe | 0.49 ms | 0.52 ms | 0.03 ms | 3,350 |
+| north pole | 0.97 ms | 1.10 ms | 0.13 ms | 256 |
+| Europe | 1.52 ms | 1.61 ms | 0.09 ms | 13,744 |
+| max zoom (13 m), inland | 0.94 ms | 1.69 ms | 0.75 ms | 3,350 |
+| max zoom (13 m), on a coast | 0.70 ms | 1.92 ms | 1.22 ms | 41,443 |
+| region (127 km) | 0.62 ms | 2.19 ms | 1.57 ms | 41,443 |
+
+The last two rows are the shape of the cost, and it is the opposite of the
+line layers': the fan is cheap when the region fills the screen and dear when
+it does not, because a segment off screen still sweeps a wedge across it.
+Clearance-based levels take care of the cases where the boundary is far;
+what is left is the middle distance, where the boundary is just off screen and
+full detail is genuinely needed. 2.19 ms is still ~450 fps.
+
 The north pole view is the remaining worst case, and it is inherent: at that
 altitude the visible cap fills the screen, so there is nothing to cull and the
 whole level has to be drawn. 1.7 ms is still ~590 fps.
@@ -302,20 +464,29 @@ Rendering is on demand — with no input, no frame is drawn.
 ## Reproduce
 
 ```bash
-node tools/build.mjs    # fetches Natural Earth -> data/*.bin
-node tools/pack.mjs     # src/template.html + data -> globo.html
+node tools/build.mjs     # fetches Natural Earth -> data/*.bin
+node tools/napoleon.mjs  # selects the empire -> data/napoleon*.bin
+node tools/relief.mjs    # fetches elevation -> data/relief.png
+node tools/pack.mjs      # src/template.html + data -> globo.html
 ```
 
-Node only, no dependencies. `build.mjs` is deterministic: it produces
-byte-identical `.bin` files on every run.
+Node only, no dependencies — `relief.mjs` carries its own PNG reader and writer
+over the zlib that ships with Node. All three builders are deterministic: they
+produce byte-identical output on every run.
 
 ```
-src/template.html      renderer (WebGL2 + controls), with the data placeholders
-tools/build.mjs        Natural Earth -> quantized binaries
-tools/pack.mjs         packs everything into one HTML file
-data/borders.bin       countries: coastline + national borders (2.38 MB)
-data/subdivisions.bin  internal state/province borders (1.78 MB)
-globo.html             the result
+src/template.html        renderer (WebGL2 + controls), with the data placeholders
+tools/build.mjs          Natural Earth -> quantized binaries
+tools/napoleon.mjs       the 1812 selection -> rings + dissolved frontier
+tools/relief.mjs         global elevation -> downsampled greyscale PNG
+tools/pack.mjs           packs everything into one HTML file
+data/coastlines.bin      coastlines (2.04 MB)
+data/land_borders.bin    country-to-country land borders (0.34 MB)
+data/subdivisions.bin    internal state/province borders (1.78 MB)
+data/napoleon.bin        the empire's rings, for the fill (0.13 MB)
+data/napoleon_edge.bin   its dissolved frontier, for the outline (0.06 MB)
+data/relief.png          elevation, 5400x2700 greyscale (1.60 MB)
+globo.html               the result
 ```
 
 ---
@@ -330,6 +501,13 @@ globo.html             the result
   without it only the loose land borders would remain.
 - `admin_1` coverage varies a lot by country: some have detailed subdivisions,
   others have few or none. What shows up is what the dataset carries.
+- The empire is drawn on **modern** borders. Where 1812 ran through the middle
+  of a present-day unit the whole unit had to go one way or the other:
+  Schleswig-Holstein is out, which loses Lübeck and Lauenburg with Danish
+  Holstein; Sisak-Moslavina is in, which gains Moslavina with the Banal
+  Frontier. Where the empire's line is also a modern one — the Rhine, the
+  Pyrenees, the Alps, the Adriatic — it is exact. San Marino is a hole, which
+  is correct: Napoleon left it alone.
 - No inertia, no spin animation, no labels.
 - Requires WebGL2 (universal in current browsers; the page says so if it is
   missing).

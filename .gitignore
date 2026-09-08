@@ -1,6 +1,9 @@
-# fonte bruta do Natural Earth (13 MB, baixada por tools/build.mjs)
+# raw Natural Earth sources (53 MB, fetched by tools/build.mjs)
 data/*.geojson
+# raw elevation source (18 MB, fetched by tools/relief.mjs)
+data/elev_source.png
 
+.claude/
 node_modules/
 .DS_Store
 Thumbs.db

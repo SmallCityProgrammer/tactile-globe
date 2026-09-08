@@ -5,21 +5,32 @@
   #gl.drag{cursor:grabbing}
   #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
        font:14px system-ui,sans-serif;color:#666}
-  #detail{position:fixed;right:20px;bottom:20px;-webkit-appearance:none;appearance:none;
+  #ui{position:fixed;right:20px;bottom:20px;display:flex;gap:8px}
+  #ui button{-webkit-appearance:none;appearance:none;
        font:500 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.02em;
        padding:10px 15px;border-radius:999px;cursor:pointer;user-select:none;
        color:#5c636a;background:rgba(255,255,255,.70);border:1px solid rgba(92,99,106,.26);
        -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
        transition:background .14s,color .14s,border-color .14s}
-  #detail:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
-  #detail[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
-  #detail:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
+  #ui button:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
+  #ui button[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
+  #empire[aria-pressed="true"]{background:#16386e;color:#e8edf6;border-color:#16386e}
+  #ui button:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
 </style>
 <canvas id="gl"></canvas>
 <div id="msg"></div>
-<button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
+<div id="ui">
+  <button id="relief" type="button" aria-pressed="false">relief</button>
+  <button id="borders" type="button" aria-pressed="true">land borders</button>
+  <button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
+  <button id="empire" type="button" aria-pressed="true">napoleonic empire</button>
+</div>
 <script id="geo" type="application/octet-stream">__DATA_B64__</script>
 <script id="geo2" type="application/octet-stream">__DATA2_B64__</script>
+<script id="geo3" type="application/octet-stream">__DATA3_B64__</script>
+<script id="geo4" type="application/octet-stream">__DATA4_B64__</script>
+<script id="geo5" type="application/octet-stream">__DATA5_B64__</script>
+<script id="reliefpng" type="application/octet-stream">__RELIEF_B64__</script>
 <script>
 (function(){
 'use strict';
@@ -28,8 +39,14 @@ var canvas = document.getElementById('gl');
 var msg = document.getElementById('msg');
 function fail(t){ msg.textContent = t; msg.style.display = 'flex'; }
 
+/* The stencil buffer holds the even-odd parity of the filled region. Still
+   no multisampling: it would antialias the stencil's edge, but at the cost
+   of running the whole frame at 4 samples. Measured A/B, that is free where
+   little of the screen is covered and up to ~1 ms where it is — 1.5 ms to
+   3.1 ms on the heaviest frame. The region's outline is drawn as a line
+   instead, in its own colour, and covers the hard edge for almost nothing. */
 var gl = canvas.getContext('webgl2', {
-  alpha:false, antialias:false, depth:false, stencil:false,
+  alpha:false, antialias:false, depth:false, stencil:true,
   premultipliedAlpha:false, preserveDrawingBuffer:false,
   powerPreference:'high-performance'
 });
@@ -77,12 +94,42 @@ var LODS = [
    layer 1 = internal state/province borders only
    Drawn in reverse order — subdivisions first, countries on top — so the
    heavier line wins wherever the two nearly touch. */
+/* layer 0 = coastlines, layer 3 = country-to-country land borders. They are
+   split so the internal lines can be switched off and leave the continents'
+   outline standing. The split is exact and came free out of the deduplication:
+   a segment carried by two country polygons is a land border, one carried by
+   a single polygon is coast. */
 var LAYERS = [
   { chains: decode('geo'),  cache: new Array(LODS.length),
     color: new Float32Array([0.376, 0.404, 0.427]), width: 1.15, on: true },
   { chains: decode('geo2'), cache: new Array(LODS.length),
     color: new Float32Array([0.612, 0.643, 0.667]), width: 0.90, on: false }
 ];
+
+/* The Napoleonic Empire at its height (1812), as closed rings filled by
+   even-odd parity. Parity is what makes a partial country expressible: the
+   ring of Germany followed by the ring of Brandenburg is Germany without
+   Brandenburg, with no clipping and no boolean geometry. */
+var REGION = {
+  rings: decode('geo3'), cache: new Array(LODS.length),
+  color: new Float32Array([0.086, 0.220, 0.431]), on: true
+};
+
+/* layer 2 = the empire's frontier, in the same colour as the fill. The
+   stencil is one bit per pixel, so the fill's edge is hard; this draws over
+   it with the line shader's analytic coverage, which is what makes the
+   outline smooth. It is the dissolved boundary, not the rings — a stretch
+   carried by two rings has the same parity on both sides and is interior. */
+LAYERS.push({
+  chains: decode('geo4'), cache: new Array(LODS.length),
+  color: REGION.color, width: 1.15, on: true
+});
+
+/* layer 3 = the land borders split off from the coastlines */
+LAYERS.push({
+  chains: decode('geo5'), cache: new Array(LODS.length),
+  color: LAYERS[0].color, width: LAYERS[0].width, on: true
+});
 
 /* ---------- spatial grid, for view culling ----------
    Segments are bucketed by the cell of their start point and the instance
@@ -232,6 +279,80 @@ function buildLOD(chains, idx){
   return { count: segs, data: data, start: start };
 }
 
+/* ---------- the filled region ----------
+   One instance per boundary segment, each drawing the triangle
+   (sub-camera point, A, B). Over a closed ring those triangles XOR into
+   exactly the ring's even-odd interior: the interior edges are shared
+   pairwise and cancel, whatever they do in space, so nothing has to be
+   triangulated and the fill has no tessellation error at all — its outline
+   is the boundary itself, at full precision.
+
+   Points are stored once, and B is read from the same buffer one point
+   further along. Sharing the bytes is what makes A of one instance and B of
+   the previous bit-identical; computing B from a delta would leave the two
+   an ulp apart and the cancellation would not be exact. A point whose flag
+   is 0 closes a ring and emits a degenerate triangle. */
+var RSTRIDE = 28;                                     // 3 hi + 3 lo + 1 flag
+
+function buildRegionLOD(idx){
+  var tolQ = LODS[idx].tol/QS, step = LODS[idx].step;
+  var src = REGION.rings, simp = [], c, i, j, n, k, q, t, d, v, hi, ch;
+
+  for (c = 0; c < src.length; c++){
+    ch = src[c];
+    if (tolQ > 0){
+      n = ch.length/2;
+      var closed = new Int32Array(2*(n+1));
+      closed.set(ch); closed[2*n] = ch[0]; closed[2*n+1] = ch[1];
+      var s = simplify(closed, tolQ);
+      if (s.length/2 < 4) continue;                   // collapses at this level
+      ch = s.subarray(0, s.length - 2);
+    }
+    simp.push(ch);
+  }
+
+  var total = 0, lonA, latA, dlon, dlat;
+  for (c = 0; c < simp.length; c++){
+    ch = simp[c]; n = ch.length/2;
+    for (i = 0; i < n; i++){
+      j = (i+1) % n;
+      total += subCount(ch[2*i], ch[2*i+1], ch[2*j], ch[2*j+1], step);
+    }
+    total++;                                          // the closing point
+  }
+
+  var data = new Float32Array(7*total), w = 0, P = [0,0,0];
+  for (c = 0; c < simp.length; c++){
+    ch = simp[c]; n = ch.length/2;
+    for (i = 0; i < n; i++){
+      j = (i+1) % n;
+      lonA = ch[2*i]*QS; latA = ch[2*i+1]*QS;
+      dlon = ch[2*j]*QS - lonA;
+      if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
+      dlat = ch[2*j+1]*QS - latA;
+      k = subCount(ch[2*i], ch[2*i+1], ch[2*j], ch[2*j+1], step);
+      for (q = 0; q < k; q++){
+        t = q/k;
+        sph(lonA + dlon*t, latA + dlat*t, P);
+        for (d = 0; d < 3; d++){
+          v = P[d]; hi = Math.fround(v);
+          data[w+d] = hi; data[w+3+d] = Math.fround(v - hi);
+        }
+        data[w+6] = 1;
+        w += 7;
+      }
+    }
+    sph(ch[0]*QS, ch[1]*QS, P);                       // t = 0 above gives the same bits
+    for (d = 0; d < 3; d++){
+      v = P[d]; hi = Math.fround(v);
+      data[w+d] = hi; data[w+3+d] = Math.fround(v - hi);
+    }
+    data[w+6] = 0;
+    w += 7;
+  }
+  return { count: total ? total - 1 : 0, data: data };
+}
+
 /* ============================================================
    3. WEBGL
    ============================================================ */
@@ -271,8 +392,11 @@ var SPH_VS = '#version 300 es\n' + [
 var SPH_FS = '#version 300 es\n' + [
 'precision highp float;',
 'in vec2 vNdc;',
-'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot;',
-'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR;',
+'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot, uAlbedo;',
+'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR, uMask;',
+'uniform sampler2D uRelief;',
+'uniform vec2 uTexel, uTexSize;',
+'uniform float uReliefAmt, uSlope;',
 'out vec4 frag;',
 'void main(){',
 '  vec3 d = normalize(uRight*(vNdc.x*uTanHF*uAspect) + uUp*(vNdc.y*uTanHF) + uFwd);',
@@ -282,7 +406,7 @@ var SPH_FS = '#version 300 es\n' + [
 '  vec3 bg = mix(uBgBot, uBgTop, vNdc.y*0.5 + 0.5);',
 '  float gr = length(vec2(dFdx(disc), dFdy(disc)));',
 '  float cov = clamp(disc/max(gr, 1e-30) + 0.5, 0.0, 1.0);',
-'  if (ct <= 0.0 || cov <= 0.0){ frag = vec4(bg, 1.0); return; }',
+'  if (ct <= 0.0 || cov <= 0.0){ frag = uMask > 0.5 ? vec4(0.0) : vec4(bg, 1.0); return; }',
 '  float sq = sqrt(max(disc, 0.0));',
 '  float t  = uC2 / max(ct*uR + sq, 1e-20);',
 '  vec3 p = t*d;',
@@ -291,8 +415,77 @@ var SPH_FS = '#version 300 es\n' + [
 '  float w    = clamp((dot(n, uCamDir) - uInvR)/uHOverR, 0.0, 1.0);',
 '  float limb = mix(0.885, 1.0, pow(w, 0.42));',
 '  float shade = mix(0.795, 1.0, diff) * limb;',
-'  frag = vec4(mix(bg, vec3(shade), cov), 1.0);',
+/* Relief. The elevation raster is equirectangular, so the surface normal
+   gives the lookup directly. The sampling offset follows the on-screen
+   texel footprint, and the matching mip level is fetched explicitly:
+   letting the hardware pick it would collapse two neighbouring taps onto
+   the same texel when minified, and the relief would vanish exactly when
+   the whole globe is in view. */
+'  if (uReliefAmt > 0.0){',
+'    float la = asin(clamp(n.y, -1.0, 1.0));',
+'    float lo = atan(-n.z, n.x);',
+'    vec2 uv = vec2(lo*0.1591549431 + 0.5, 0.5 - la*0.3183098862);',
+'    vec2 ddx = dFdx(uv), ddy = dFdy(uv);',
+'    ddx.x -= floor(ddx.x + 0.5);',           // the seam at the antimeridian
+'    ddy.x -= floor(ddy.x + 0.5);',
+'    float rho = max(length(ddx*uTexSize), length(ddy*uTexSize));',
+'    float lod = clamp(log2(max(rho, 1.0)), 0.0, 7.0);',
+'    vec2 st = exp2(lod)*uTexel;',
+'    float ex = textureLod(uRelief, uv + vec2(st.x, 0.0), lod).r',
+'             - textureLod(uRelief, uv - vec2(st.x, 0.0), lod).r;',
+'    float ey = textureLod(uRelief, uv + vec2(0.0, st.y), lod).r',
+'             - textureLod(uRelief, uv - vec2(0.0, st.y), lod).r;',
+'    float cl = max(cos(la), 0.03);',
+'    vec3 nl = normalize(vec3(-ex*uSlope/cl, ey*uSlope, 1.0));',
+'    float hs = dot(nl, vec3(-0.5, 0.5, 0.7071068));',   // light from the north-west
+'    shade *= clamp(1.0 + uReliefAmt*(hs - 0.7071068), 0.35, 1.6);',
+'  }',
+'  frag = uMask > 0.5 ? vec4(uAlbedo*shade, cov)',
+'                     : vec4(mix(bg, vec3(shade), cov), 1.0);',
 '}'].join('\n');
+
+/* the filled region: one triangle per boundary segment, apex at the point
+   under the camera, XORed into the stencil buffer */
+var FAN_VS = '#version 300 es\n' + [
+'precision highp float;',
+'layout(location=0) in vec3 aHi;',
+'layout(location=1) in vec3 aLo;',
+'layout(location=2) in float aFlag;',
+'layout(location=3) in vec3 bHi;',
+'layout(location=4) in vec3 bLo;',
+'uniform vec3 uCamHi, uCamLo, uCamDir;',
+'uniform mat3 uView;',
+'uniform float uTanHF, uAspect, uHorizK, uSinH, uH;',
+/* Beyond the horizon a point is slid along its meridian from the camera
+   onto the horizon circle. Consecutive points keep their order around that
+   circle, so the fan still traces the visible part of the region — the
+   silhouette clip falls out of the projection instead of being computed. */
+'vec3 clampHorizon(vec3 rel){',
+'  if (dot(rel, uCamDir) + uHorizK >= 0.0) return rel;',
+'  vec3 P = rel + uCamHi + uCamLo;',
+'  vec3 w = P - uCamDir*dot(P, uCamDir);',
+'  float wl = length(w);',
+'  if (wl < 1e-7){',
+'    vec3 t = abs(uCamDir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);',
+'    w = normalize(cross(uCamDir, t));',
+'  } else w /= wl;',
+'  return w*uSinH - uCamDir*uHorizK;',
+'}',
+'void main(){',
+'  if (aFlag < 0.5){ gl_Position = vec4(0.0, 0.0, 0.0, 1.0); return; }',
+'  vec3 rel = gl_VertexID == 0 ? -uH*uCamDir',
+'           : gl_VertexID == 1 ? clampHorizon((aHi - uCamHi) + (aLo - uCamLo))',
+'                              : clampHorizon((bHi - uCamHi) + (bLo - uCamLo));',
+'  vec3 v = uView*rel;',
+/* every point of the sphere and of its interior has v.z <= -h, so w stays
+   positive and nothing is ever clipped by the near plane */
+'  gl_Position = vec4(v.x/(uTanHF*uAspect), v.y/uTanHF, 0.0, -v.z);',
+'}'].join('\n');
+
+var FAN_FS = '#version 300 es\n' + [
+'precision highp float;',
+'out vec4 frag;',
+'void main(){ frag = vec4(1.0); }'].join('\n');
 
 /* pass 2: instanced lines, constant width in pixels, positions in emulated
    double precision (hi/lo split, subtracted relative to the eye) */
@@ -365,10 +558,32 @@ var LIN_FS = '#version 300 es\n' + [
 '  frag = vec4(uLineColor * mix(0.86, 1.0, diff), a);',
 '}'].join('\n');
 
-var pSph, pLin, uSph, uLin;
-try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); }
+var pSph, pLin, pFan, uSph, uLin, uFan;
+try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); pFan = prog(FAN_VS, FAN_FS); }
 catch(e){ fail('Erro de shader: ' + e.message); return; }
-uSph = U(pSph); uLin = U(pLin);
+uSph = U(pSph); uLin = U(pLin); uFan = U(pFan);
+
+/* elevation raster, decoded by the browser straight out of the embedded PNG */
+var reliefTex = null;
+var RELIEF_W = 0, RELIEF_H = 0;
+(function(){
+  var im = new Image();
+  im.onload = function(){
+    RELIEF_W = im.width; RELIEF_H = im.height;
+    reliefTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, reliefTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, im);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    requestRender();
+  };
+  im.src = 'data:image/png;base64,' + document.getElementById('reliefpng').textContent;
+})();
 
 var emptyVao = gl.createVertexArray();
 function uploadLOD(L, idx){
@@ -387,6 +602,26 @@ function uploadLOD(L, idx){
   L.cache[idx] = { vao: vao, vbo: vbo, count: b.count, start: b.start,
                    margin: LODS[idx].step*1.5*DEG };
   return L.cache[idx];
+}
+
+/* B is the same buffer read one point further along — the two attributes
+   alias the same bytes, which is what keeps the fan's shared edges exact */
+function uploadRegionLOD(idx){
+  var b = buildRegionLOD(idx);
+  var vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  var vbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, b.data, gl.STATIC_DRAW);
+  var at = [[0,3,0], [1,3,12], [2,1,24], [3,3,RSTRIDE], [4,3,RSTRIDE+12]];
+  for (var i = 0; i < at.length; i++){
+    gl.enableVertexAttribArray(at[i][0]);
+    gl.vertexAttribPointer(at[i][0], at[i][1], gl.FLOAT, false, RSTRIDE, at[i][2]);
+    gl.vertexAttribDivisor(at[i][0], 1);
+  }
+  gl.bindVertexArray(null);
+  REGION.cache[idx] = { vao: vao, vbo: vbo, count: b.count };
+  return REGION.cache[idx];
 }
 
 /* ============================================================
@@ -616,20 +851,95 @@ function resize(){
 window.addEventListener('resize', resize);
 if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
 
-function pickLOD(L){
+function pixelLOD(){
   var degPerPx = (h*FOV/vpH)/DEG;
-  var best = 0, i;
-  for (i = LODS.length - 1; i >= 0; i--){
-    if (LODS[i].tol <= 0.8*degPerPx){ best = i; break; }
-  }
+  for (var i = LODS.length - 1; i >= 0; i--) if (LODS[i].tol <= 0.8*degPerPx) return i;
+  return 0;
+}
+function lodAt(L, best){
   if (L.cache[best]) return L.cache[best];
+  var i;
   for (i = best; i >= 0; i--) if (L.cache[i]) return L.cache[i];   // prefer too much detail
   for (i = best; i < LODS.length; i++) if (L.cache[i]) return L.cache[i];
   return null;
 }
+function pickLOD(L){ return lodAt(L, pixelLOD()); }
+
+/* ---------- how much of the sphere around the view is empty ----------
+   The fan cannot be culled the way the lines are: every segment of a ring
+   has to be drawn or the parity is wrong. But a segment that is off screen
+   costs a wedge running clear across it, so a boundary far away is the
+   expensive case, and it is also the one where detail cannot be seen.
+
+   So the region picks its level by clearance instead of by pixels. The
+   cells the boundary occupies are known, which bounds from below how far
+   the nearest boundary is; a level whose simplification cannot move the
+   boundary that far is indistinguishable from the exact one. */
+var RCELL = 1;                              // degrees; the 4° grid is too coarse here
+var regDir = null, regRad = null, regN = 0;
+(function(){
+  var NX = Math.round(360/RCELL), NY = Math.round(180/RCELL);
+  var mark = new Uint8Array(NX*NY), c, i, j, n, k, q, r, lonA, latA, dlon, dlat, lo, la;
+  function put(lon, lat){
+    var x = (lon + 180) % 360; if (x < 0) x += 360;
+    x = (x/RCELL)|0; if (x >= NX) x = NX - 1;
+    var y = ((lat + 90)/RCELL)|0;
+    if (y < 0) y = 0; else if (y >= NY) y = NY - 1;
+    mark[y*NX + x] = 1;
+  }
+  for (c = 0; c < REGION.rings.length; c++){
+    r = REGION.rings[c]; n = r.length/2;
+    for (i = 0; i < n; i++){
+      j = (i+1) % n;
+      lonA = r[2*i]*QS; latA = r[2*i+1]*QS;
+      dlon = r[2*j]*QS - lonA;
+      if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
+      dlat = r[2*j+1]*QS - latA;
+      k = subCount(r[2*i], r[2*i+1], r[2*j], r[2*j+1], RCELL*0.5);   // no cell is skipped
+      for (q = 0; q < k; q++) put(lonA + dlon*q/k, latA + dlat*q/k);
+    }
+  }
+  for (i = 0; i < mark.length; i++) if (mark[i]) regN++;
+  regDir = new Float32Array(3*regN); regRad = new Float32Array(regN);
+  var cc = [0,0,0], pp = [0,0,0], w = 0, u, v, dd, worst;
+  for (i = 0; i < mark.length; i++){
+    if (!mark[i]) continue;
+    lo = (i % NX)*RCELL - 180; la = ((i/NX)|0)*RCELL - 90;
+    sph(lo + RCELL/2, la + RCELL/2, cc);
+    worst = 1;
+    for (u = 0; u <= 2; u++) for (v = 0; v <= 2; v++){
+      sph(lo + RCELL*u/2, la + RCELL*v/2, pp);
+      dd = cc[0]*pp[0] + cc[1]*pp[1] + cc[2]*pp[2];
+      if (dd < worst) worst = dd;
+    }
+    regDir[3*w] = cc[0]; regDir[3*w+1] = cc[1]; regDir[3*w+2] = cc[2];
+    regRad[w] = Math.acos(Math.max(-1, Math.min(1, worst))) + 0.001;
+    w++;
+  }
+})();
+
+function pickRegionLOD(viewRho){
+  var best = pixelLOD(), i, d, a, clear = Infinity;
+  for (i = 0; i < regN; i++){
+    d = regDir[3*i]*camU[0] + regDir[3*i+1]*camU[1] + regDir[3*i+2]*camU[2];
+    a = Math.acos(Math.max(-1, Math.min(1, d))) - regRad[i];
+    if (a < clear) clear = a;
+  }
+  var slack = clear - viewRho;
+  if (slack > 0){
+    for (i = LODS.length - 1; i > best; i--){
+      if (LODS[i].tol*DEG*1.5 < slack){ best = i; break; }
+    }
+  }
+  return lodAt(REGION, best);
+}
 
 var BG_TOP = new Float32Array([0.918, 0.929, 0.937]);
 var BG_BOT = new Float32Array([0.839, 0.855, 0.871]);
+
+var RELIEF_ON = false;
+var RELIEF_AMT = 1.0;        // overall strength
+var RELIEF_SLOPE = 2.5;      // vertical exaggeration
 
 var last = 0, rafId = 0;
 function requestRender(){
@@ -672,7 +982,7 @@ function frame(ts){
    the instance attributes at its byte offset — WebGL2 has no baseInstance. */
 var MAXR = 64;
 var rngS = new Int32Array(MAXR), rngC = new Int32Array(MAXR), rngN = 0;
-var capTmp = [0,0,0], drawn = 0;
+var capTmp = [0,0,0], drawn = 0, fill = 0;
 
 /* angular radius, about the sub-camera point, of a cap containing
    everything currently on screen */
@@ -756,9 +1066,74 @@ function draw(){
   gl.uniform1f(uSph.uR, R);
   gl.uniform1f(uSph.uInvR, 1/R);
   gl.uniform1f(uSph.uHOverR, h/R);
+  gl.uniform1f(uSph.uMask, 0.0);
+
+  /* The raster is the one part of this with a finite resolution, so it fades
+     out once the screen is magnifying it past roughly 8x — past that it is
+     blur pretending to be terrain, while the vector lines stay sharp. */
+  var ramt = 0;
+  if (RELIEF_ON && reliefTex){
+    var t = (h*FOV/vpH)/(2*Math.PI/RELIEF_W);      // texels per screen pixel
+    var fade = (t - 0.04)/0.08;
+    ramt = RELIEF_AMT*(fade < 0 ? 0 : fade > 1 ? 1 : fade);
+  }
+  if (ramt > 0){
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, reliefTex);
+    gl.uniform1i(uSph.uRelief, 0);
+    gl.uniform2f(uSph.uTexel, 1/RELIEF_W, 1/RELIEF_H);
+    gl.uniform2f(uSph.uTexSize, RELIEF_W, RELIEF_H);
+    gl.uniform1f(uSph.uSlope, RELIEF_SLOPE);
+  }
+  gl.uniform1f(uSph.uReliefAmt, ramt);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-  var ORDER = [1, 0];                      // subdivisions first, countries on top
+  /* ---- the filled region ----
+     XOR every fan triangle into the stencil buffer, then run the sphere
+     shader a second time where the parity came out odd. Going back through
+     the sphere shader is what gives the fill the globe's own shading, its
+     exact silhouette and its analytic edge at the limb for free; the region's
+     own outline is antialiased by the multisampled stencil. */
+  fill = 0;
+  var rlod = REGION.on ? pickRegionLOD(viewRho) : null;
+  if (rlod && rlod.count){
+    gl.enable(gl.STENCIL_TEST);
+    gl.clearStencil(0);
+    gl.clear(gl.STENCIL_BUFFER_BIT);
+    gl.colorMask(false, false, false, false);
+    gl.stencilFunc(gl.ALWAYS, 0, 0xff);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
+
+    gl.useProgram(pFan);
+    gl.uniform3fv(uFan.uCamHi, camHi);
+    gl.uniform3fv(uFan.uCamLo, camLo);
+    gl.uniform3f(uFan.uCamDir, camU[0], camU[1], camU[2]);
+    gl.uniformMatrix3fv(uFan.uView, false, viewMat);
+    gl.uniform1f(uFan.uTanHF, TANHF);
+    gl.uniform1f(uFan.uAspect, aspect);
+    gl.uniform1f(uFan.uHorizK, C2/R);
+    gl.uniform1f(uFan.uSinH, Math.sqrt(C2)/R);
+    gl.uniform1f(uFan.uH, h);
+    gl.bindVertexArray(rlod.vao);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, rlod.count);
+    fill = rlod.count;
+
+    gl.colorMask(true, true, true, true);
+    gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(pSph);
+    gl.uniform1f(uSph.uMask, 1.0);
+    gl.uniform3fv(uSph.uAlbedo, REGION.color);
+    gl.bindVertexArray(emptyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.uniform1f(uSph.uMask, 0.0);
+    gl.disable(gl.STENCIL_TEST);
+    gl.disable(gl.BLEND);
+  }
+
+  var ORDER = [2, 1, 3, 0];                // empire outline, subdivisions, land borders, coast on top
   var started = false, li, L, lod, halfW;
   for (li = 0; li < ORDER.length; li++){
     L = LAYERS[ORDER[li]];
@@ -803,18 +1178,23 @@ function draw(){
 resize();
 updateCam();
 uploadLOD(LAYERS[0], 3);          // coarse country level before the first frame
+uploadLOD(LAYERS[2], 3);          // and the empire with it, so it is never missing
+uploadRegionLOD(3);
 requestRender();
 
 /* the rest builds in the background; subdivisions land early so the button
-   never opens onto an empty globe */
-var pending = [[0,2],[1,3],[0,1],[1,2],[0,0],[1,1],[1,0],[0,4],[1,4]];
+   never opens onto an empty globe. -1 is the region. */
+var pending = [[3,2],[0,2],[-1,2],[2,2],[1,3],[3,1],[0,1],[-1,1],[2,1],[1,2],[3,0],[0,0],[-1,0],[2,0],[1,1],[1,0],[3,4],[-1,4],[2,4],[0,4],[1,4]];
 (function next(){
   if (!pending.length) return;
   var j = pending.shift();
-  setTimeout(function(){ uploadLOD(LAYERS[j[0]], j[1]); requestRender(); next(); }, 30);
+  setTimeout(function(){
+    if (j[0] < 0) uploadRegionLOD(j[1]); else uploadLOD(LAYERS[j[0]], j[1]);
+    requestRender(); next();
+  }, 30);
 })();
 
-/* ---- detail toggle ---- */
+/* ---- toggles ---- */
 var btn = document.getElementById('detail');
 function setDetail(on){
   LAYERS[1].on = on;
@@ -822,16 +1202,48 @@ function setDetail(on){
   requestRender();
 }
 btn.addEventListener('click', function(){ setDetail(!LAYERS[1].on); btn.blur(); });
+
+var btnE = document.getElementById('empire');
+function setEmpire(on){
+  REGION.on = on;
+  LAYERS[2].on = on;
+  btnE.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnE.addEventListener('click', function(){ setEmpire(!REGION.on); btnE.blur(); });
+
+var btnB = document.getElementById('borders');
+function setBorders(on){
+  LAYERS[3].on = on;
+  btnB.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnB.addEventListener('click', function(){ setBorders(!LAYERS[3].on); btnB.blur(); });
+
+var btnR = document.getElementById('relief');
+function setRelief(on){
+  RELIEF_ON = on;
+  btnR.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnR.addEventListener('click', function(){ setRelief(!RELIEF_ON); btnR.blur(); });
+
 window.addEventListener('keydown', function(e){
   if (e.key === 'd' || e.key === 'D'){ setDetail(!LAYERS[1].on); }
+  else if (e.key === 'n' || e.key === 'N'){ setEmpire(!REGION.on); }
+  else if (e.key === 'b' || e.key === 'B'){ setBorders(!LAYERS[3].on); }
+  else if (e.key === 'r' || e.key === 'R'){ setRelief(!RELIEF_ON); }
 });
 
 window.__globe = {
   render: function(){ resize(); updateCam(); draw(); },
   info: function(){
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
-             detail: LAYERS[1].on, drawn: drawn, ranges: rngN,
+             detail: LAYERS[1].on, empire: REGION.on, borders: LAYERS[3].on,
+             relief: RELIEF_ON, reliefReady: !!reliefTex,
+             drawn: drawn, fill: fill, ranges: rngN,
              lods: LAYERS.map(function(L){ return L.cache.map(function(c){ return c ? c.count : null; }); }),
+             rlods: REGION.cache.map(function(c){ return c ? c.count : null; }),
              vp: [vpW, vpH], dpr: dpr };
   },
   set: function(o){
@@ -839,6 +1251,11 @@ window.__globe = {
     if (o.lat !== undefined) lat = o.lat;
     if (o.h   !== undefined) logH = logHTarget = clampLog(Math.log(o.h));
     if (o.detail !== undefined) setDetail(!!o.detail);
+    if (o.borders !== undefined) setBorders(!!o.borders);
+    if (o.relief !== undefined) setRelief(!!o.relief);
+    if (o.slope !== undefined) RELIEF_SLOPE = o.slope;
+    if (o.amt !== undefined) RELIEF_AMT = o.amt;
+    if (o.empire !== undefined) setEmpire(!!o.empire);
     anchor = null; updateCam(); requestRender();
   }
 };

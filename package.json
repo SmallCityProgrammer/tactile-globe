@@ -1,13 +1,15 @@
 {
   "name": "tactile-globe",
   "version": "1.0.0",
-  "description": "A white globe with country and state borders in grey, as a single offline HTML file",
+  "description": "A white globe with borders, relief and the Napoleonic Empire, as a single offline HTML file",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node tools/build.mjs",
     "pack": "node tools/pack.mjs",
-    "all": "node tools/build.mjs && node tools/pack.mjs"
+    "all": "node tools/build.mjs && node tools/napoleon.mjs && node tools/relief.mjs && node tools/pack.mjs",
+    "napoleon": "node tools/napoleon.mjs",
+    "relief": "node tools/relief.mjs"
   },
   "license": "MIT",
   "repository": {

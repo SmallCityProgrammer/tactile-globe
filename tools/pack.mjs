@@ -17,8 +17,12 @@ import { fileURLToPath } from 'url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TPL = path.join(ROOT, 'src', 'template.html');
 const BINS = [
-  ['__DATA_B64__',  path.join(ROOT, 'data', 'borders.bin')],
-  ['__DATA2_B64__', path.join(ROOT, 'data', 'subdivisions.bin')]
+  ['__DATA_B64__',  path.join(ROOT, 'data', 'coastlines.bin')],
+  ['__DATA2_B64__', path.join(ROOT, 'data', 'subdivisions.bin')],
+  ['__DATA3_B64__', path.join(ROOT, 'data', 'napoleon.bin')],
+  ['__DATA4_B64__', path.join(ROOT, 'data', 'napoleon_edge.bin')],
+  ['__DATA5_B64__', path.join(ROOT, 'data', 'land_borders.bin')],
+  ['__RELIEF_B64__', path.join(ROOT, 'data', 'relief.png')]
 ];
 const OUT = path.join(ROOT, 'globo.html');
 

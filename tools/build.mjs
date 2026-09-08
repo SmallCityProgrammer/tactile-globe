@@ -3,8 +3,13 @@
  *
  * Produces two layers:
  *
- *   borders.bin        countries: coastline + national borders  (admin_0)
+ *   coastlines.bin     coastlines only                          (admin_0)
+ *   land_borders.bin   country-to-country land borders only     (admin_0)
  *   subdivisions.bin   internal state/province borders only     (admin_1)
+ *
+ * The first split is free and exact. A segment that appears in two different
+ * country polygons is a land border between them; a segment that appears once
+ * is coastline. The occurrence count is already needed for deduplication.
  *
  * The admin_1 polygons also carry coastline and national borders. Both
  * datasets are built on the same topology — 99.6% of admin_0 segments appear
@@ -77,10 +82,23 @@ const key = (ax, ay, bx, by) =>
 /* Walks each ring in order and cuts the chain wherever a segment is
    dropped — same result as building the full topology, without indexing
    vertices. `exclude` removes segments belonging to another layer. */
-function chainsOf(qrings, exclude) {
+/* how many rings each segment belongs to: 1 = coastline, 2 = land border */
+function occurrences(qrings) {
+  const c = new Map();
+  for (const r of qrings) {
+    const n = r.length / 2;
+    for (let i = 0; i + 1 < n; i++) {
+      const k = key(r[2 * i], r[2 * i + 1], r[2 * i + 2], r[2 * i + 3]);
+      c.set(k, (c.get(k) || 0) + 1);
+    }
+  }
+  return c;
+}
+
+function chainsOf(qrings, exclude, accept) {
   const seen = new Set();
   const chains = [];
-  let kept = 0, dupes = 0, artificial = 0, shared = 0;
+  let kept = 0, dupes = 0, artificial = 0, shared = 0, rejected = 0;
 
   for (const r of qrings) {
     const n = r.length / 2;
@@ -96,6 +114,7 @@ function chainsOf(qrings, exclude) {
       } else {
         const k = key(ax, ay, bx, by);
         if (exclude && exclude.has(k)) { ok = false; shared++; }
+        else if (accept && !accept(k)) { ok = false; rejected++; }
         else if (seen.has(k)) { ok = false; dupes++; }
         else { seen.add(k); kept++; }
       }
@@ -108,7 +127,7 @@ function chainsOf(qrings, exclude) {
       }
     }
   }
-  return { chains, seen, kept, dupes, artificial, shared };
+  return { chains, seen, kept, dupes, artificial, shared, rejected };
 }
 
 /* zigzag varints over consecutive deltas */
@@ -141,23 +160,35 @@ function report(label, out, r, bytes) {
     `  unique segments     ${r.kept}`,
     `    duplicates        ${r.dupes}`,
     `    artificial        ${r.artificial}`,
-    r.shared ? `    already in layer 1  ${r.shared}` : null,
+    r.shared ? `    already drawn       ${r.shared}` : null,
+    r.rejected ? `    other layer         ${r.rejected}` : null,
     `  chains              ${r.chains.length}`,
     `  points              ${pts}`,
     `  ${out.padEnd(24)}${(bytes / 1048576).toFixed(2)} MB  (${(bytes / pts).toFixed(2)} bytes/point)`
   ].filter(Boolean).join('\n'));
 }
 
-/* ---- layer 1: countries ---- */
+/* ---- coastlines and land borders, split by occurrence count ---- */
 const f0 = await source('ne_10m_admin_0_countries.geojson', 13);
-const r0 = chainsOf(rings(f0), null);
-const b0 = encode(r0.chains);
-fs.writeFileSync(path.join(DATA, 'borders.bin'), b0);
-report('countries (admin_0)', 'data/borders.bin', r0, b0.length);
+const q0 = rings(f0);
+const occ = occurrences(q0);
 
-/* ---- layer 2: subdivisions, subtracting whatever layer 1 already has ---- */
+const rc = chainsOf(q0, null, k => occ.get(k) === 1);
+const bc = encode(rc.chains);
+fs.writeFileSync(path.join(DATA, 'coastlines.bin'), bc);
+report('coastlines (admin_0)', 'data/coastlines.bin', rc, bc.length);
+
+const rb = chainsOf(q0, null, k => occ.get(k) > 1);
+const bb = encode(rb.chains);
+fs.writeFileSync(path.join(DATA, 'land_borders.bin'), bb);
+report('land borders (admin_0)', 'data/land_borders.bin', rb, bb.length);
+
+/* ---- subdivisions, subtracting everything admin_0 already draws ---- */
+const drawn0 = new Set(rc.seen);
+for (const k of rb.seen) drawn0.add(k);
+
 const f1 = await source('ne_10m_admin_1_states_provinces.geojson', 40);
-const r1 = chainsOf(rings(f1), r0.seen);
+const r1 = chainsOf(rings(f1), drawn0, null);
 const b1 = encode(r1.chains);
 fs.writeFileSync(path.join(DATA, 'subdivisions.bin'), b1);
 report('subdivisions (admin_1)', 'data/subdivisions.bin', r1, b1.length);

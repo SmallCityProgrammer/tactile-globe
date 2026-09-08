@@ -263,9 +263,9 @@ instance count:
 |---|---|---|
 | north pole | 0.22 ms | 0.25 ms |
 | whole globe | 0.60 ms | 0.56 ms |
-| Europe (523k line instances, most subpixel) | 1.61 ms | 1.79 ms |
+| Europe — dense lines, most of them subpixel | 1.61 ms | 1.79 ms |
 | max zoom | 0.20 ms | 0.45 ms |
-| region (lines and wedges sweeping the screen) | 1.48 ms | 3.11 ms |
+| region — lines and wedges sweeping the screen | 1.48 ms | 3.11 ms |
 
 Free where little is covered, and up to ~1 ms — the heaviest frame roughly
 doubles — where a lot is. Not a catastrophe, and worth knowing rather than
@@ -327,10 +327,9 @@ empire's border, not a pile of country outlines.
 
 ### The cost model, which is upside down
 
-The line layers are culled by a spatial grid: at maximum zoom that takes them
-from 1.58 million instances to about 2,400. **The fan cannot be culled that
-way.** Drop one segment and the parity is wrong *everywhere*, not just where
-that segment was.
+The line layers are culled by a spatial grid, which at maximum zoom throws away
+almost all of their instances. **The fan cannot be culled that way.** Drop one
+segment and the parity is wrong *everywhere*, not just where that segment was.
 
 Worse, an off-screen segment is not free the way an off-screen line is. Its two
 points clamp to the horizon circle, which at high zoom is far outside the
@@ -343,7 +342,7 @@ instances × screen radius in pixels
 which is the opposite of the lines: **the fan is cheap when the region fills the
 screen and dear when it does not.** Zoomed in over Paris with the boundary
 hundreds of kilometres away, the first working version spent 41,443 wedges
-sweeping the whole viewport to paint it a single flat colour, at about 2 ms.
+sweeping the whole viewport to paint it a single flat colour, for 1.5–2 ms.
 
 ### A dead end worth recording
 
@@ -385,8 +384,20 @@ function pickRegionLOD(viewRho){
 ```
 
 The cell caps are conservative supersets, so `clear` is a lower bound and the
-choice is always safe. Over Paris at 13 m this takes the fan from 41,443
-instances to 889, and the added cost from ~2 ms to 0.23 ms.
+choice is always safe. Over Paris, where the pixel rule asks for the full
+41,443 instances at every altitude below a kilometre, clearance gives:
+
+| altitude | fan |
+|---|---|
+| 127 km | 41,443 |
+| 12.7 km | 41,443 |
+| 1.27 km | 13,744 |
+| 127 m | 13,744 |
+| 12.7 m | 3,350 |
+
+The closer in, the less of the boundary can possibly be seen, and the coarser
+the fan is allowed to get — which is exactly backwards from how the line layers
+choose, and exactly right for this one.
 
 ### The grid resolution trap
 
@@ -403,21 +414,22 @@ above it, it stops working.
 
 ### Measured
 
-RTX 3050 Laptop, 1280×860, GPU timer queries, best of 3 passes × 4 runs of 30
-frames, both line layers on:
+RTX 3050 Laptop, 1280×860, GPU timer queries, best of 5 runs of 30 frames,
+line layers on:
 
 | view | camera | without | with | added | fan |
 |---|---|---|---|---|---|
-| whole globe | 13 379 km | 0.51 ms | 0.54 ms | 0.03 ms | 3,350 |
 | north pole | 2 230 km | 0.22 ms | 0.22 ms | 0.00 ms | 256 |
-| Europe | 3 504 km | 1.38 ms | 1.68 ms | 0.30 ms | 13,744 |
-| max zoom | 12.7 m | 0.07 ms | 0.30 ms | 0.23 ms | 3,350 |
-| region | 127 km | 0.07 ms | 2.20 ms | 2.13 ms | 41,443 |
+| whole globe | 13 379 km | 0.58 ms | 0.60 ms | 0.02 ms | 3,350 |
+| max zoom | 12.7 m | 0.05 ms | 0.20 ms | 0.15 ms | 3,350 |
+| Europe | 3 504 km | 1.42 ms | 1.61 ms | 0.19 ms | 13,744 |
+| region | 127 km | 0.06 ms | 1.48 ms | 1.42 ms | 41,443 |
 
 The last row is what is left, and it is the honest middle distance: the boundary
 is just off screen, so clearance cannot coarsen it, and full detail is genuinely
-needed for the part that is on screen. 2.20 ms is still ~450 fps, and it is the
-worst case, not the common one.
+needed for the part that is on screen. It is also the least stable number here,
+drifting between about 1.5 and 2.2 ms run to run. Either way it is the worst
+case, not the common one, and still ~500 fps.
 
 ### What would fix that row
 

@@ -1,15 +1,16 @@
 {
   "name": "tactile-globe",
   "version": "1.0.0",
-  "description": "A white globe with country borders, subdivisions and continental relief, as a single offline HTML file",
+  "description": "A globe of country borders in four styles: plain, sepia, atlas and satellite, as a single offline HTML file",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node tools/build.mjs",
     "pack": "node tools/pack.mjs",
-    "all": "node tools/build.mjs && node tools/relief.mjs && node tools/places.mjs && node tools/pack.mjs",
+    "all": "node tools/build.mjs && node tools/relief.mjs && node tools/places.mjs && node tools/satellite.mjs && node tools/pack.mjs",
     "relief": "node tools/relief.mjs",
-    "places": "node tools/places.mjs"
+    "places": "node tools/places.mjs",
+    "satellite": "node tools/satellite.mjs"
   },
   "license": "MIT",
   "repository": {

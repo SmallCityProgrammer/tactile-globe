@@ -1,11 +1,11 @@
 # Tactile Globe
 
-A white globe with country borders in grey. No oceans, no labels.
-Scroll to zoom, drag to spin. Buttons add continental relief, a graticule,
-city dots, place names and a live coordinate readout, take the internal
-borders away, or add the state and province borders of every country.
+A globe of country borders that can dress as four different maps. Scroll to
+zoom, drag to spin. A style selector swaps the whole surface; buttons add a
+graticule, city dots, place names and a live coordinate readout, take the
+internal borders away, or add the state and province borders of every country.
 
-A single 7.9 MB file with no external dependencies — it opens from `file://`,
+A single 11.2 MB file with no external dependencies — it opens from `file://`,
 by double-click, offline.
 
 ![The globe](docs/globo.png)
@@ -20,6 +20,7 @@ Open `globo.html`. That's it.
 |---|---|
 | scroll | zoom, anchored on the point under the cursor |
 | drag | spins the globe, the grabbed point stays under the cursor |
+| `style` selector (or `s` to cycle) | plain, sepia, atlas or satellite |
 | `grid` button (or `g`) | parallels and meridians every 15°, plus the tropics and polar circles |
 | `lon / lat` button (or `p`) | reads out the coordinates under the cursor |
 | `cities` button (or `c`) | city dots, more of them the closer you get |
@@ -198,6 +199,47 @@ exact horizon test the geometry uses, projected in double precision, sorted by
 rank, and placed greedily against the boxes already taken — first come, first
 served, capped at 90. Country names get a bias so a capital beats a small
 country and a small country beats a small town.
+
+### Styles
+
+Four surfaces, and three of them cost nothing to ship. Sepia and atlas are
+**functions of the elevation raster that was already in the file** — a colour
+ramp and a hillshade, evaluated in the sphere's fragment shader. No new
+download, no new bytes, and no measurable frame time: every style lands in the
+same 0.1–0.44 ms band as the plain globe.
+
+- **plain** — the white cartographic globe the project started as.
+- **sepia** — tan paper, the relief doing all the work. The grain is applied in
+  *screen* space, not on the sphere, because paper sits in front of a map
+  rather than on the terrain: it must not zoom with it.
+- **atlas** — the hypsometric ramp of a physical atlas. Land elevation is
+  heavily skewed low, so the input is shaped (`pow(e, 0.42)`) before the ramp,
+  or every continent lands on the first colour.
+- **satellite** — NASA Blue Marble, 5400x2700, the one style that needs its own
+  raster (2.45 MB).
+
+Because the ramp reads elevation, the atlas style colours Ireland and the
+Amazon the same: distinguishing forest from grassland needs land cover, which
+is a different dataset.
+
+### Reconstruction, and what it can and cannot fix
+
+The satellite style is a whole-globe texture: at 7.42 km per pixel it is at
+native resolution only when the globe is small on screen, and magnifies from
+there — about 615,000x at maximum zoom, where the entire screen fits inside one
+texel.
+
+Hardware bilinear is what makes an enlarged image look like tiles. Its
+reconstruction is a tent, so the first derivative jumps at every texel edge and
+the eye reads those creases as blocks. **Catmull-Rom in nine bilinear taps** is
+C1 across the edge, so the seams disappear at any zoom, for 0.05 ms — and it is
+applied only under magnification, since a cubic on minification is the wrong
+filter anyway.
+
+That fixes *pixelation* completely and *detail* not at all. Past roughly 30x the
+image is smooth colour with nothing in it, and the vector coastline beside it
+stays exact, which advertises the blur rather than hiding it. Whether the
+imagery should fade out where it stops having anything to say is still open.
 
 ### The graticule
 
@@ -405,6 +447,7 @@ Rendering is on demand — with no input, no frame is drawn.
 node tools/build.mjs     # fetches Natural Earth -> data/*.bin
 node tools/relief.mjs    # fetches elevation -> data/relief.png
 node tools/places.mjs    # countries + cities -> data/places.bin
+node tools/satellite.mjs # Blue Marble -> data/satellite.jpg
 node tools/pack.mjs      # src/template.html + data -> globo.html
 ```
 
@@ -417,12 +460,14 @@ src/template.html        renderer (WebGL2 + controls), with the data placeholder
 tools/build.mjs          Natural Earth -> quantized binaries
 tools/relief.mjs         global elevation -> downsampled greyscale PNG
 tools/places.mjs         label points and cities -> name + rank + position
+tools/satellite.mjs      Blue Marble, downloaded and embedded as published
 tools/pack.mjs           packs everything into one HTML file
 data/coastlines.bin      coastlines (2.04 MB)
 data/land_borders.bin    country-to-country land borders (0.34 MB)
 data/subdivisions.bin    internal state/province borders (1.78 MB)
 data/relief.png          elevation, 5400x2700 greyscale (1.60 MB)
 data/places.bin          258 countries and 7,342 cities (0.12 MB)
+data/satellite.jpg       Blue Marble, 5400x2700 (2.45 MB)
 globo.html               the result
 ```
 

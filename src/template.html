@@ -14,7 +14,21 @@
        transition:background .14s,color .14s,border-color .14s}
   #ui button:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
   #ui button[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
-  #ui button:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
+  #ui button:focus-visible,#ui select:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
+  #ui select{
+       -webkit-appearance:none;appearance:none;
+       font:500 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.02em;
+       padding:10px 30px 10px 15px;border-radius:999px;cursor:pointer;
+       color:#5c636a;background-color:rgba(255,255,255,.70);
+       border:1px solid rgba(92,99,106,.26);
+       -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+       background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" stroke="%235c636a" stroke-width="1.6" stroke-linecap="round"/></svg>');
+       background-repeat:no-repeat;background-position:right 12px center;
+       transition:background-color .14s,color .14s,border-color .14s}
+  #ui select:hover{background-color:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
+  #ui select.on{background-color:#5c636a;color:#eef1f2;border-color:#5c636a;
+       background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" stroke="%23eef1f2" stroke-width="1.6" stroke-linecap="round"/></svg>')}
+  #ui select option{color:#22282d;background:#fff}
   #labels{position:fixed;inset:0;pointer-events:none;overflow:hidden}
   #labels span{
     position:absolute;white-space:nowrap;
@@ -46,6 +60,12 @@
   <button id="coordsbtn" type="button" aria-pressed="false">lon / lat</button>
   <button id="cities" type="button" aria-pressed="false">cities</button>
   <button id="names" type="button" aria-pressed="false">labels</button>
+  <select id="style" aria-label="map style" title="map style">
+    <option value="0">plain</option>
+    <option value="1">sepia</option>
+    <option value="2">atlas</option>
+    <option value="3">satellite</option>
+  </select>
   <button id="relief" type="button" aria-pressed="false">relief</button>
   <button id="borders" type="button" aria-pressed="true">land borders</button>
   <button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
@@ -54,6 +74,7 @@
 <script id="geo2" type="application/octet-stream">__DATA2_B64__</script>
 <script id="geo5" type="application/octet-stream">__DATA5_B64__</script>
 <script id="places" type="application/octet-stream">__PLACES_B64__</script>
+<script id="satjpg" type="application/octet-stream">__SAT_B64__</script>
 <script id="reliefpng" type="application/octet-stream">__RELIEF_B64__</script>
 <script>
 (function(){
@@ -401,10 +422,55 @@ var SPH_FS = '#version 300 es\n' + [
 'in vec2 vNdc;',
 'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot;',
 'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR;',
-'uniform sampler2D uRelief;',
+'uniform sampler2D uRelief, uSat;',
 'uniform vec2 uTexel, uTexSize;',
 'uniform float uReliefAmt, uSlope;',
+'uniform vec2 uSatSize, uSatTexel;',
+'uniform float uSatAmt, uRecon, uStyle;',
 'out vec4 frag;',
+/* Catmull-Rom in nine bilinear taps. Under magnification the hardware's own
+   bilinear is what makes an enlarged image look like tiles: its reconstruction
+   is a tent, so the first derivative jumps at every texel edge and the eye
+   reads those creases as blocks. A cubic is C1 across the edge, so the seams
+   disappear whatever the zoom. */
+/* Screen-space grain, the way the paper sits in front of the map in the
+   reference rather than on the sphere: it must not zoom with the terrain. */
+'float grain(vec2 p){',
+'  return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453);',
+'}',
+/* Hypsometric ramp. Land elevation is heavily skewed low, so the input is
+   shaped before the ramp or every continent lands on the first colour. */
+'vec3 hypso(float e){',
+'  float t = pow(clamp(e, 0.0, 1.0), 0.42);',
+'  vec3 c = mix(vec3(0.639, 0.749, 0.553), vec3(0.847, 0.827, 0.616), smoothstep(0.00, 0.28, t));',
+'  c = mix(c, vec3(0.788, 0.667, 0.470), smoothstep(0.26, 0.52, t));',
+'  c = mix(c, vec3(0.604, 0.451, 0.322), smoothstep(0.50, 0.76, t));',
+'  c = mix(c, vec3(0.910, 0.894, 0.878), smoothstep(0.74, 1.00, t));',
+'  return c;',
+'}',
+'vec3 catrom(sampler2D t, vec2 uv, vec2 size){',
+'  vec2 sp = uv*size;',
+'  vec2 tp1 = floor(sp - 0.5) + 0.5;',
+'  vec2 f = sp - tp1;',
+'  vec2 w0 = f*(-0.5 + f*(1.0 - 0.5*f));',
+'  vec2 w1 = 1.0 + f*f*(-2.5 + 1.5*f);',
+'  vec2 w2 = f*(0.5 + f*(2.0 - 1.5*f));',
+'  vec2 w3 = f*f*(-0.5 + 0.5*f);',
+'  vec2 w12 = w1 + w2;',
+'  vec2 o12 = w2/w12;',
+'  vec2 p0 = (tp1 - 1.0)/size, p3 = (tp1 + 2.0)/size, p12 = (tp1 + o12)/size;',
+'  vec3 r = vec3(0.0);',
+'  r += textureLod(t, vec2(p0.x,  p0.y ), 0.0).rgb * (w0.x  * w0.y );',
+'  r += textureLod(t, vec2(p12.x, p0.y ), 0.0).rgb * (w12.x * w0.y );',
+'  r += textureLod(t, vec2(p3.x,  p0.y ), 0.0).rgb * (w3.x  * w0.y );',
+'  r += textureLod(t, vec2(p0.x,  p12.y), 0.0).rgb * (w0.x  * w12.y);',
+'  r += textureLod(t, vec2(p12.x, p12.y), 0.0).rgb * (w12.x * w12.y);',
+'  r += textureLod(t, vec2(p3.x,  p12.y), 0.0).rgb * (w3.x  * w12.y);',
+'  r += textureLod(t, vec2(p0.x,  p3.y ), 0.0).rgb * (w0.x  * w3.y );',
+'  r += textureLod(t, vec2(p12.x, p3.y ), 0.0).rgb * (w12.x * w3.y );',
+'  r += textureLod(t, vec2(p3.x,  p3.y ), 0.0).rgb * (w3.x  * w3.y );',
+'  return r;',
+'}',
 'void main(){',
 '  vec3 d = normalize(uRight*(vNdc.x*uTanHF*uAspect) + uUp*(vNdc.y*uTanHF) + uFwd);',
 '  float ct = -dot(d, uCamDir);',
@@ -447,7 +513,41 @@ var SPH_FS = '#version 300 es\n' + [
 '    float hs = dot(nl, vec3(-0.5, 0.5, 0.7071068));',   // light from the north-west
 '    shade *= clamp(1.0 + uReliefAmt*(hs - 0.7071068), 0.35, 1.6);',
 '  }',
-'  frag = vec4(mix(bg, vec3(shade), cov), 1.0);',
+'  float elev = 0.0;',
+'  if (uStyle > 0.5 && uStyle < 2.5){',
+'    float laS = asin(clamp(n.y, -1.0, 1.0));',
+'    float loS = atan(-n.z, n.x);',
+'    elev = texture(uRelief, vec2(loS*0.1591549431 + 0.5, 0.5 - laS*0.3183098862)).r;',
+'  }',
+'  vec3 surface = vec3(shade);',
+'  if (uStyle > 0.5 && uStyle < 1.5){',
+     /* sepia paper: the relief does all the work, the colour barely varies */
+'    float land = smoothstep(0.0, 0.012, elev);',
+'    vec3 paper = mix(vec3(0.878, 0.847, 0.769), vec3(0.788, 0.729, 0.612), land);',
+'    float sh = clamp((shade - 0.55)/0.45, 0.0, 1.0);',
+'    surface = paper*(0.42 + 0.58*pow(sh, 0.85));',
+'    surface *= 0.94 + 0.06*grain(gl_FragCoord.xy);',
+'  } else if (uStyle > 1.5 && uStyle < 2.5){',
+     /* hypsometric atlas: ramp on land, flat pale water */
+'    float land = smoothstep(0.0, 0.010, elev);',
+'    vec3 c = mix(vec3(0.788, 0.859, 0.906), hypso(elev), land);',
+'    surface = c*(0.55 + 0.45*shade);',
+'  }',
+'  if (uSatAmt > 0.0){',
+'    float la2 = asin(clamp(n.y, -1.0, 1.0));',
+'    float lo2 = atan(-n.z, n.x);',
+'    vec2 uv2 = vec2(lo2*0.1591549431 + 0.5, 0.5 - la2*0.3183098862);',
+'    vec2 ex = dFdx(uv2), ey = dFdy(uv2);',
+'    ex.x -= floor(ex.x + 0.5); ey.x -= floor(ey.x + 0.5);',
+'    float rho2 = max(length(ex*uSatSize), length(ey*uSatSize));',
+'    vec3 col;',
+'    if (uRecon < 0.5)      col = textureLod(uSat, floor(uv2*uSatSize)/uSatSize + uSatTexel*0.5, 0.0).rgb;',
+'    else if (uRecon < 1.5) col = texture(uSat, uv2).rgb;',
+'    else                   col = rho2 < 1.0 ? catrom(uSat, uv2, uSatSize) : texture(uSat, uv2).rgb;',
+'    col = max(col, vec3(0.0));',
+'    surface = mix(surface, col*(0.42 + 0.58*shade), uSatAmt);',
+'  }',
+'  frag = vec4(mix(bg, surface, cov), 1.0);',
 '}'].join('\n');
 
 /* pass 2: instanced lines, constant width in pixels, positions in emulated
@@ -610,6 +710,27 @@ var cityVao = null;
   gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 28, 12); gl.vertexAttribDivisor(1, 1);
   gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 28, 24); gl.vertexAttribDivisor(2, 1);
   gl.bindVertexArray(null);
+})();
+
+/* Blue Marble, same 5400x2700 grid as the elevation raster */
+var satTex = null, SAT_W = 0, SAT_H = 0;
+(function(){
+  var im = new Image();
+  im.onload = function(){
+    SAT_W = im.width; SAT_H = im.height;
+    satTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, satTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, gl.RGB, gl.UNSIGNED_BYTE, im);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    requestRender();
+  };
+  im.src = 'data:image/jpeg;base64,' + document.getElementById('satjpg').textContent;
 })();
 
 var emptyVao = gl.createVertexArray();
@@ -878,6 +999,8 @@ var BG_TOP = new Float32Array([0.918, 0.929, 0.937]);
 var BG_BOT = new Float32Array([0.839, 0.855, 0.871]);
 
 var GRID_ON = false, CITIES_ON = false, NAMES_ON = false, COORDS_ON = false;
+var SAT_AMT = 1.0, SAT_RECON = 2;                  // 0 nearest, 1 bilinear, 2 cubic
+var STYLE = 0;                                     // 0 plain, 1 sepia, 2 atlas, 3 satellite
 var CITY_DOT = new Float32Array([0.267, 0.310, 0.345]);
 var RELIEF_ON = false;
 var RELIEF_AMT = 1.0;        // overall strength
@@ -1121,11 +1244,15 @@ function draw(){
   /* The raster is the one part of this with a finite resolution, so it fades
      out once the screen is magnifying it past roughly 8x — past that it is
      blur pretending to be terrain, while the vector lines stay sharp. */
+  /* the derived styles are functions of elevation, so they need the raster
+     whether or not the relief toggle is on */
+  var styleNeedsRelief = (STYLE === 1 || STYLE === 2);
   var ramt = 0;
-  if (RELIEF_ON && reliefTex){
+  if ((RELIEF_ON || styleNeedsRelief) && reliefTex){
     var t = (h*FOV/vpH)/(2*Math.PI/RELIEF_W);      // texels per screen pixel
     var fade = (t - 0.04)/0.08;
     ramt = RELIEF_AMT*(fade < 0 ? 0 : fade > 1 ? 1 : fade);
+    if (STYLE === 1) ramt *= 1.9;      // sepia leans on the hillshade
   }
   if (ramt > 0){
     gl.activeTexture(gl.TEXTURE0);
@@ -1136,6 +1263,25 @@ function draw(){
     gl.uniform1f(uSph.uSlope, RELIEF_SLOPE);
   }
   gl.uniform1f(uSph.uReliefAmt, ramt);
+
+  var samt = (STYLE === 3 && satTex) ? SAT_AMT : 0.0;
+  if (samt > 0.0){
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, satTex);
+    gl.uniform1i(uSph.uSat, 1);
+    gl.uniform2f(uSph.uSatSize, SAT_W, SAT_H);
+    gl.uniform2f(uSph.uSatTexel, 1/SAT_W, 1/SAT_H);
+    gl.uniform1f(uSph.uRecon, SAT_RECON);
+  }
+  gl.uniform1f(uSph.uSatAmt, samt);
+  gl.uniform1f(uSph.uStyle, STYLE);
+  if (ramt > 0 || STYLE === 1 || STYLE === 2){
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, reliefTex);
+    gl.uniform1i(uSph.uRelief, 0);
+    gl.uniform2f(uSph.uTexel, 1/RELIEF_W, 1/RELIEF_H);
+    gl.uniform2f(uSph.uTexSize, RELIEF_W, RELIEF_H);
+  }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   var ORDER = [3, 4, 1, 2, 0];             // graticule under everything, coast on top
@@ -1284,6 +1430,15 @@ function setCoords(on){
 }
 btnX.addEventListener('click', function(){ setCoords(!COORDS_ON); btnX.blur(); });
 
+var selStyle = document.getElementById('style');
+function setStyle(v){
+  STYLE = v | 0;
+  selStyle.value = String(STYLE);
+  selStyle.className = STYLE ? 'on' : '';
+  requestRender();
+}
+selStyle.addEventListener('change', function(){ setStyle(+selStyle.value); selStyle.blur(); });
+
 var btnR = document.getElementById('relief');
 function setRelief(on){
   RELIEF_ON = on;
@@ -1300,6 +1455,7 @@ window.addEventListener('keydown', function(e){
   else if (e.key === 'c' || e.key === 'C'){ setCities(!CITIES_ON); }
   else if (e.key === 'l' || e.key === 'L'){ setNames(!NAMES_ON); }
   else if (e.key === 'p' || e.key === 'P'){ setCoords(!COORDS_ON); }
+  else if (e.key === 's' || e.key === 'S'){ setStyle((STYLE + 1) % 4); }
 });
 
 window.__globe = {
@@ -1308,6 +1464,7 @@ window.__globe = {
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
              detail: LAYERS[1].on, borders: LAYERS[2].on,
              grid: GRID_ON, cities: CITIES_ON, names: NAMES_ON, coords: COORDS_ON,
+             style: STYLE, satReady: !!satTex, recon: SAT_RECON,
              cityCount: cityCount(), labelsShown: lbPool.filter(function(e){ return e.style.display !== 'none'; }).length,
              relief: RELIEF_ON, reliefReady: !!reliefTex,
              drawn: drawn, ranges: rngN,
@@ -1325,6 +1482,9 @@ window.__globe = {
     if (o.cities !== undefined) setCities(!!o.cities);
     if (o.names !== undefined) setNames(!!o.names);
     if (o.coords !== undefined) setCoords(!!o.coords);
+    if (o.style !== undefined) setStyle(o.style);
+    if (o.recon !== undefined) SAT_RECON = o.recon;
+    if (o.satAmt !== undefined) SAT_AMT = o.satAmt;
     if (o.slope !== undefined) RELIEF_SLOPE = o.slope;
     if (o.amt !== undefined) RELIEF_AMT = o.amt;
     anchor = null; updateCam(); requestRender();

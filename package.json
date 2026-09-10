@@ -7,10 +7,11 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "pack": "node tools/pack.mjs",
-    "all": "node tools/build.mjs && node tools/relief.mjs && node tools/places.mjs && node tools/satellite.mjs && node tools/pack.mjs",
+    "all": "node tools/build.mjs && node tools/relief.mjs && node tools/places.mjs && node tools/satellite.mjs && node tools/isobaths.mjs && node tools/pack.mjs",
     "relief": "node tools/relief.mjs",
     "places": "node tools/places.mjs",
-    "satellite": "node tools/satellite.mjs"
+    "satellite": "node tools/satellite.mjs",
+    "isobaths": "node tools/isobaths.mjs"
   },
   "license": "MIT",
   "repository": {

@@ -69,6 +69,7 @@
     <option value="5">contour</option>
     <option value="6">grey</option>
   </select>
+  <button id="isobtn" type="button" aria-pressed="false">isobaths</button>
   <button id="relief" type="button" aria-pressed="false">relief</button>
   <button id="borders" type="button" aria-pressed="true">land borders</button>
   <button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
@@ -76,6 +77,7 @@
 <script id="geo" type="application/octet-stream">__DATA_B64__</script>
 <script id="geo2" type="application/octet-stream">__DATA2_B64__</script>
 <script id="geo5" type="application/octet-stream">__DATA5_B64__</script>
+<script id="iso" type="application/octet-stream">__ISOBATH_B64__</script>
 <script id="places" type="application/octet-stream">__PLACES_B64__</script>
 <script id="satjpg" type="application/octet-stream">__SAT_B64__</script>
 <script id="bathpng" type="application/octet-stream">__BATH_B64__</script>
@@ -237,6 +239,24 @@ LAYERS.push({
 LAYERS.push({
   chains: GRID_MARKED, cache: new Array(LODS.length), minStep: 0.12,
   color: new Float32Array([0.557, 0.604, 0.639]), width: 1.0, on: false
+});
+
+/* layer 5 = the isobaths, the depth contours of the sea floor.
+   Vector, so they stay a clean line at every zoom, where the bathymetric
+   raster is a field and eventually shows its texels. The two are meant to
+   be read together, which is why the bathymetric style turns these on.
+   The colour sits between the ends of the depth ramp so the line reads over
+   the shelf and over the trenches alike, and over bare white as well.
+   minStep is the loosest of any layer, and deliberately. Densification is
+   there to keep a chord from cutting under the sphere, and 0.25 degrees
+   holds that error to 15 m. That would be far too coarse for a coastline,
+   but these contours were simplified to about 1.1 km on the way in and the
+   source is not much better than that: a 15 m sag on a line whose own
+   position is uncertain by a kilometre is not an error anyone can see. At
+   0.06 it looked identical and cost 2.2x the segments. */
+LAYERS.push({
+  chains: decode('iso'), cache: new Array(LODS.length), minStep: 0.25,
+  color: new Float32Array([0.298, 0.451, 0.596]), width: 0.70, on: false
 });
 
 /* ---------- spatial grid, for view culling ----------
@@ -1362,7 +1382,7 @@ function draw(){
   }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-  var ORDER = [3, 4, 1, 2, 0];             // graticule under everything, coast on top
+  var ORDER = [3, 4, 5, 1, 2, 0];          // graticule under everything, coast on top
   var started = false, li, L, lod, halfW;
   for (li = 0; li < ORDER.length; li++){
     L = LAYERS[ORDER[li]];
@@ -1435,10 +1455,15 @@ updateCam();
 uploadLOD(LAYERS[0], 3);          // coarse country level before the first frame
 requestRender();
 
-/* the rest builds in the background; subdivisions land early so the button
-   never opens onto an empty globe */
-var pending = [[2,2],[0,2],[3,2],[4,2],[1,3],[2,1],[0,1],[3,1],[4,1],[1,2],[2,0],[0,0],
-               [3,0],[4,0],[1,1],[1,0],[2,4],[0,4],[3,4],[4,4],[1,4]];
+/* The rest builds in the background; subdivisions land early so the button
+   never opens onto an empty globe. The isobaths have no level 0: they are
+   stored already simplified to 0.010 degrees, which is looser than level 1's
+   own tolerance, so the two would come out identical and the finest level
+   would be 64 MB of duplicate. lodAt falls through to the next level that
+   exists, so leaving the hole costs nothing. */
+var pending = [[2,2],[0,2],[3,2],[4,2],[1,3],[5,3],[2,1],[0,1],[3,1],[4,1],[1,2],[5,2],
+               [2,0],[0,0],[3,0],[4,0],[1,1],[1,0],[5,1],
+               [2,4],[0,4],[3,4],[4,4],[1,4],[5,4]];
 (function next(){
   if (!pending.length) return;
   var j = pending.shift();
@@ -1482,6 +1507,14 @@ function setGrid(on){
 }
 btnG.addEventListener('click', function(){ setGrid(!GRID_ON); btnG.blur(); });
 
+var btnI = document.getElementById('isobtn');
+function setIso(on){
+  LAYERS[5].on = on;
+  btnI.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnI.addEventListener('click', function(){ setIso(!LAYERS[5].on); btnI.blur(); });
+
 var btnC = document.getElementById('cities');
 function setCities(on){
   CITIES_ON = on;
@@ -1509,10 +1542,17 @@ function setCoords(on){
 btnX.addEventListener('click', function(){ setCoords(!COORDS_ON); btnX.blur(); });
 
 var selStyle = document.getElementById('style');
+/* The bathymetric style brings the isobaths with it, and takes them away
+   again on the way out: the raster is the depth field and the contours are
+   its lines, and neither is the whole chart on its own. The button stays
+   live either way, so they can be pinned over any other style. */
 function setStyle(v){
+  var was = STYLE;
   STYLE = v | 0;
   selStyle.value = String(STYLE);
   selStyle.className = STYLE ? 'on' : '';
+  if (STYLE === 4 && was !== 4) setIso(true);
+  else if (was === 4 && STYLE !== 4) setIso(false);
   requestRender();
 }
 selStyle.addEventListener('change', function(){ setStyle(+selStyle.value); selStyle.blur(); });
@@ -1532,6 +1572,7 @@ window.addEventListener('keydown', function(e){
   else if (e.key === 'g' || e.key === 'G'){ setGrid(!GRID_ON); }
   else if (e.key === 'c' || e.key === 'C'){ setCities(!CITIES_ON); }
   else if (e.key === 'l' || e.key === 'L'){ setNames(!NAMES_ON); }
+  else if (e.key === 'i' || e.key === 'I'){ setIso(!LAYERS[5].on); }
   else if (e.key === 'p' || e.key === 'P'){ setCoords(!COORDS_ON); }
   else if (e.key === 's' || e.key === 'S'){ setStyle((STYLE + 1) % 7); }
 });
@@ -1540,7 +1581,7 @@ window.__globe = {
   render: function(){ resize(); updateCam(); draw(); },
   info: function(){
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
-             detail: LAYERS[1].on, borders: LAYERS[2].on,
+             detail: LAYERS[1].on, borders: LAYERS[2].on, iso: LAYERS[5].on,
              grid: GRID_ON, cities: CITIES_ON, names: NAMES_ON, coords: COORDS_ON,
              style: STYLE, satReady: !!satTex, bathReady: !!bathTex, recon: SAT_RECON,
              cityCount: cityCount(), labelsShown: lbPool.filter(function(e){ return e.style.display !== 'none'; }).length,
@@ -1555,6 +1596,7 @@ window.__globe = {
     if (o.h   !== undefined) logH = logHTarget = clampLog(Math.log(o.h));
     if (o.detail !== undefined) setDetail(!!o.detail);
     if (o.borders !== undefined) setBorders(!!o.borders);
+    if (o.iso !== undefined) setIso(!!o.iso);
     if (o.relief !== undefined) setRelief(!!o.relief);
     if (o.grid !== undefined) setGrid(!!o.grid);
     if (o.cities !== undefined) setCities(!!o.cities);

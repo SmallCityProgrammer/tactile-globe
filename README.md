@@ -5,7 +5,7 @@ zoom, drag to spin. A style selector swaps the whole surface; buttons add a
 graticule, city dots, place names and a live coordinate readout, take the
 internal borders away, or add the state and province borders of every country.
 
-A single 12.8 MB file with no external dependencies — it opens from `file://`,
+A single 19.1 MB file with no external dependencies — it opens from `file://`,
 by double-click, offline.
 
 ![The globe](docs/globo.png)
@@ -25,6 +25,7 @@ Open `globo.html`. That's it.
 | `lon / lat` button (or `p`) | reads out the coordinates under the cursor |
 | `cities` button (or `c`) | city dots, more of them the closer you get |
 | `labels` button (or `l`) | country and city names |
+| `isobaths` button (or `i`) | depth contours of the sea floor; the bathymetric style turns them on |
 | `relief` button (or the `r` key) | shades the continents by elevation |
 | `land borders` button (or the `b` key) | hides the internal borders, keeping the coastline |
 | `states & provinces` button (or the `d` key) | toggles the subdivisions; brings the land borders back with them |
@@ -280,6 +281,70 @@ chain spanning the full 360° then unwraps across the antimeridian to a span of
 zero — the whole circle collapsing to one degenerate segment. No quadrant can
 wrap.
 
+### Isobaths
+
+The bathymetric style is a raster, and a raster is a field: it gives the ocean
+a continuous depth everywhere, which is what draws the Mid-Atlantic Ridge and
+the fracture zones. What it does not give is an edge. Magnified far enough it
+is a smooth blur, and the shelf break — the one line on the sea floor a reader
+actually looks for — has no position you could point at.
+
+So the contours ship as vectors too, from Natural Earth's 10m bathymetry. It
+is published as twelve nested polygon bands rather than as lines, but the
+boundary of a band *is* an isobath, and a boundary is a chain of segments,
+which is exactly what the border pipeline already eats. Nothing new had to be
+written to draw them; filling the bands instead would have meant bringing back
+the even-odd stencil pass and trading a continuous field for twelve flat steps.
+
+Three things had to be taken out on the way in.
+
+**The 0 m band is the coastline**, and the globe already draws that from
+admin_0. Skipping it drops the single largest of the twelve files, 9.04 MB of
+the 49.7 MB total, and avoids a second coastline drawn a hair off the first.
+
+**Adjacent bands share the contour between them** — the deeper band's outer
+ring is the shallower band's hole — so the undirected segment key that splits
+coastline from land border catches those too. It is worth much less here than
+it is there: only 7,365 segments coincide exactly, because Natural Earth
+generates each band separately rather than from shared topology. The bands are
+processed deepest first so the survivor is the deeper one.
+
+**Some band boundaries are not contours at all.** Where a polygon closes
+itself along a straight construction edge, Natural Earth still densifies it,
+laying evenly spaced points exactly on the line — one such run steps 17.6°
+across the North Pacific in 36 collinear hops. Filled, that edge is interior
+to the band and invisible; stroked, it is a ruled line across the ocean.
+Simplification folds the run back to the single straight segment it always
+was, which is correct and is precisely what makes it visible, so the cut has
+to happen afterwards, on length: surviving Douglas-Peucker at a kilometre
+means the source ran straight to within a kilometre over the whole span, and a
+111 km contour segment that straight is not a contour. 1,697 of them.
+
+The antimeridian needed a wider net than the borders did. A polygon cut at the
+seam leaves a straight run up the edge of the rectangle, and the equality test
+that works on Natural Earth's cultural layers finds only 102 of them here —
+these files put the cut at 179.999156 and at -179.999989 as well, so the test
+has to be a neighbourhood. With the polar closures, 8,933 edges.
+
+What is left is 1,769,277 source points in 11 bands, simplified at 0.010°
+(~1.1 km) to 842,724 in 38,502 chains, 4.74 MB at 5.90 bytes a point. The
+tolerance is not a compromise: 1:10m bathymetry is not accurate to better than
+a kilometre in the first place, so this is at the data's own noise floor.
+
+That same reasoning sets the layer's other two numbers, both looser than any
+other layer's and both deliberately. `minStep` is 0.25°, which lets a chord
+sag 15 m under the sphere — absurd for a coastline, meaningless on a line
+whose own position is uncertain by a kilometre, and worth 2.2× fewer segments
+than the 0.06° that looked identical. And the layer has no level 0: it is
+stored already simplified at 0.010°, which is looser than level 1's own
+tolerance, so the two would come out byte-identical and the finest level would
+be 64 MB of duplicate. `lodAt` falls through to the next level that exists,
+so the hole costs nothing.
+
+The cost is 2.5 ms on the whole-globe view, where 843,596 instances are in
+frame and there is little to cull, and under 0.2 ms at any zoom past regional.
+The layer is off unless asked for.
+
 ---
 
 ## The rendering
@@ -472,12 +537,15 @@ node tools/build.mjs     # fetches Natural Earth -> data/*.bin
 node tools/relief.mjs    # fetches elevation -> data/relief.png
 node tools/places.mjs    # countries + cities -> data/places.bin
 node tools/satellite.mjs # Blue Marble -> data/satellite.jpg
+node tools/isobaths.mjs  # Natural Earth bathymetry -> data/isobaths.bin
 node tools/pack.mjs      # src/template.html + data -> globo.html
 ```
 
 Node only, no dependencies — `relief.mjs` carries its own PNG reader and writer
-over the zlib that ships with Node. All three builders are deterministic: they
-produce byte-identical output on every run.
+over the zlib that ships with Node. Every builder is deterministic: they
+produce byte-identical output on every run. `isobaths.mjs` takes an optional
+simplification tolerance in degrees, if you want to trade size against
+fidelity: `node tools/isobaths.mjs 0.02` halves the layer to 3.47 MB.
 
 ```
 src/template.html        renderer (WebGL2 + controls), with the data placeholders
@@ -485,6 +553,7 @@ tools/build.mjs          Natural Earth -> quantized binaries
 tools/relief.mjs         elevation and bathymetry -> downsampled greyscale PNGs
 tools/places.mjs         label points and cities -> name + rank + position
 tools/satellite.mjs      Blue Marble, downloaded and embedded as published
+tools/isobaths.mjs       Natural Earth bathymetry bands -> depth contours
 tools/pack.mjs           packs everything into one HTML file
 data/coastlines.bin      coastlines (2.04 MB)
 data/land_borders.bin    country-to-country land borders (0.34 MB)
@@ -493,6 +562,7 @@ data/relief.png          elevation, 5400x2700 greyscale (1.60 MB)
 data/bathymetry.png      sea depth, 2700x1350 greyscale (1.18 MB)
 data/places.bin          258 countries and 7,342 cities (0.12 MB)
 data/satellite.jpg       Blue Marble, 5400x2700 (2.45 MB)
+data/isobaths.bin        11 depth contours, 200 m to 10000 m (4.74 MB)
 globo.html               the result
 ```
 
@@ -516,4 +586,4 @@ globo.html               the result
 
 ## Credits
 
-Borders: [Natural Earth](https://www.naturalearthdata.com/), public domain.
+Borders and bathymetry: [Natural Earth](https://www.naturalearthdata.com/), public domain.

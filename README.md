@@ -98,11 +98,21 @@ already says which is which:
 > carried by a single polygon is coast
 
 So the layer splits, exactly and for free, into **406,165** coastline segments
-(4,264 chains, 2.04 MB) and **68,617** land border segments (234 chains,
-0.34 MB) — and the two add back to the 474,782. That is what the `land borders`
-button switches off, leaving the continents' outline standing:
+(4,264 chains, 2.04 MB) and **68,482** land border segments (233 chains,
+0.34 MB). That is what the `land borders` button switches off, leaving the
+continents' outline standing:
 
 ![Outline and relief only](docs/contorno.png)
+
+Carrying the country code alongside the tally buys one more thing. Natural
+Earth keeps Western Sahara as its own admin_0, and drawn that way it is a lone
+box outlined in the middle of the desert — which reads as a defect rather than
+as a position on a disputed territory. A `MERGE` table renames it to Morocco
+before the tally, so the 135 segments they share end up carried twice by what
+is now one country: neither coastline nor border between two, so they are
+dropped outright. The pair is bounded by the Atlantic, Algeria and Mauritania,
+the way most modern maps draw it. Whatever `MERGE` drops is also withheld from
+the subdivision layer, or the outline would simply move down a level.
 
 ### The second layer: states and provinces
 

@@ -7,9 +7,13 @@
  *   land_borders.bin   country-to-country land borders only     (admin_0)
  *   subdivisions.bin   internal state/province borders only     (admin_1)
  *
- * The first split is free and exact. A segment that appears in two different
- * country polygons is a land border between them; a segment that appears once
- * is coastline. The occurrence count is already needed for deduplication.
+ * The first split is free and exact. A segment carried by two different
+ * country polygons is a land border between them; one carried by a single
+ * polygon is coastline. The tally is already needed for deduplication.
+ *
+ * Carrying the country code alongside the tally also buys the MERGE table
+ * below: a segment carried twice by what we call the same country is an
+ * internal seam, and is dropped entirely.
  *
  * The admin_1 polygons also carry coastline and national borders. Both
  * datasets are built on the same topology — 99.6% of admin_0 segments appear
@@ -32,6 +36,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = path.join(ROOT, 'data');
 const BASE = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/';
 
+/* Natural Earth keeps Western Sahara as its own admin_0. Drawn that way it
+   is a lone box outlined in the middle of the Sahara, which reads as an
+   error rather than as a position on a disputed territory. Most modern maps
+   draw it inside Morocco; so does this one. The seam between them is
+   dropped, and the pair is bounded by the coast, Algeria and Mauritania. */
+const MERGE = { SAH: 'MAR' };
+
 const Q = 1e6;                        // quantization: 1e-6 degree ~= 0.11 m
 const POLAR = Math.round(89.9 * Q);
 const SEAM = Math.round(180 * Q);
@@ -49,24 +60,27 @@ async function source(name, mb) {
   return file;
 }
 
-/* rings of every polygon, quantized, with repeated points dropped */
+/* rings of every polygon, quantized, with repeated points dropped; each
+   ring remembers the country it came from, after MERGE is applied */
 function rings(file) {
   const gj = JSON.parse(fs.readFileSync(file, 'utf8'));
   const out = [];
-  const push = r => {
-    const q = [];
-    let px = NaN, py = NaN;
-    for (const c of r) {
-      const x = Math.round(c[0] * Q), y = Math.round(c[1] * Q);
-      if (x === px && y === py) continue;
-      q.push(x, y);
-      px = x; py = y;
-    }
-    if (q.length >= 4) out.push(q);
-  };
   for (const f of gj.features) {
     const g = f.geometry;
     if (!g) continue;
+    const raw = f.properties && (f.properties.ADM0_A3 || f.properties.adm0_a3);
+    const code = MERGE[raw] || raw || '?';
+    const push = r => {
+      const q = [];
+      let px = NaN, py = NaN;
+      for (const c of r) {
+        const x = Math.round(c[0] * Q), y = Math.round(c[1] * Q);
+        if (x === px && y === py) continue;
+        q.push(x, y);
+        px = x; py = y;
+      }
+      if (q.length >= 4) out.push({ q, code });
+    };
     if (g.type === 'Polygon') for (const r of g.coordinates) push(r);
     else if (g.type === 'MultiPolygon') for (const p of g.coordinates) for (const r of p) push(r);
   }
@@ -82,17 +96,22 @@ const key = (ax, ay, bx, by) =>
 /* Walks each ring in order and cuts the chain wherever a segment is
    dropped — same result as building the full topology, without indexing
    vertices. `exclude` removes segments belonging to another layer. */
-/* how many rings each segment belongs to: 1 = coastline, 2 = land border */
-function occurrences(qrings) {
-  const c = new Map();
-  for (const r of qrings) {
-    const n = r.length / 2;
+/* For each segment: how many rings carry it, and which countries. One ring
+   means coastline; two countries mean a land border between them; twice by
+   one country means an internal seam, which nobody should see. */
+function tally(qrings) {
+  const m = new Map();
+  for (const { q, code } of qrings) {
+    const n = q.length / 2;
     for (let i = 0; i + 1 < n; i++) {
-      const k = key(r[2 * i], r[2 * i + 1], r[2 * i + 2], r[2 * i + 3]);
-      c.set(k, (c.get(k) || 0) + 1);
+      const k = key(q[2 * i], q[2 * i + 1], q[2 * i + 2], q[2 * i + 3]);
+      let e = m.get(k);
+      if (!e) { e = { n: 0, codes: new Set() }; m.set(k, e); }
+      e.n++;
+      e.codes.add(code);
     }
   }
-  return c;
+  return m;
 }
 
 function chainsOf(qrings, exclude, accept) {
@@ -100,7 +119,8 @@ function chainsOf(qrings, exclude, accept) {
   const chains = [];
   let kept = 0, dupes = 0, artificial = 0, shared = 0, rejected = 0;
 
-  for (const r of qrings) {
+  for (const ring of qrings) {
+    const r = ring.q || ring;
     const n = r.length / 2;
     let cur = null;
     for (let i = 0; i + 1 < n; i++) {
@@ -171,21 +191,24 @@ function report(label, out, r, bytes) {
 /* ---- coastlines and land borders, split by occurrence count ---- */
 const f0 = await source('ne_10m_admin_0_countries.geojson', 13);
 const q0 = rings(f0);
-const occ = occurrences(q0);
+const tal = tally(q0);
 
-const rc = chainsOf(q0, null, k => occ.get(k) === 1);
+const rc = chainsOf(q0, null, k => tal.get(k).n === 1);
 const bc = encode(rc.chains);
 fs.writeFileSync(path.join(DATA, 'coastlines.bin'), bc);
 report('coastlines (admin_0)', 'data/coastlines.bin', rc, bc.length);
 
-const rb = chainsOf(q0, null, k => occ.get(k) > 1);
+const rb = chainsOf(q0, null, k => { const e = tal.get(k); return e.n > 1 && e.codes.size > 1; });
 const bb = encode(rb.chains);
 fs.writeFileSync(path.join(DATA, 'land_borders.bin'), bb);
 report('land borders (admin_0)', 'data/land_borders.bin', rb, bb.length);
 
-/* ---- subdivisions, subtracting everything admin_0 already draws ---- */
-const drawn0 = new Set(rc.seen);
-for (const k of rb.seen) drawn0.add(k);
+/* ---- subdivisions, subtracting every admin_0 segment ----
+   Every segment admin_0 knows about, including the seams MERGE dropped and
+   the artificial edges. What the country layer deliberately does not draw,
+   the subdivision layer must not resurrect: otherwise merging Western
+   Sahara into Morocco at admin_0 would just move its outline down a level. */
+const drawn0 = new Set(tal.keys());
 
 const f1 = await source('ne_10m_admin_1_states_provinces.geojson', 40);
 const r1 = chainsOf(rings(f1), drawn0, null);

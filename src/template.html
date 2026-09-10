@@ -35,14 +35,13 @@ var canvas = document.getElementById('gl');
 var msg = document.getElementById('msg');
 function fail(t){ msg.textContent = t; msg.style.display = 'flex'; }
 
-/* The stencil buffer holds the even-odd parity of the filled region. Still
-   no multisampling: it would antialias the stencil's edge, but at the cost
+/* No multisampling: it would antialias the sphere's edge, but at the cost
    of running the whole frame at 4 samples. Measured A/B, that is free where
    little of the screen is covered and up to ~1 ms where it is — 1.5 ms to
    3.1 ms on the heaviest frame. The region's outline is drawn as a line
    instead, in its own colour, and covers the hard edge for almost nothing. */
 var gl = canvas.getContext('webgl2', {
-  alpha:false, antialias:false, depth:false, stencil:true,
+  alpha:false, antialias:false, depth:false, stencil:false,
   premultipliedAlpha:false, preserveDrawingBuffer:false,
   powerPreference:'high-performance'
 });
@@ -105,11 +104,6 @@ var LAYERS = [
 /* No filled region ships in this build. The machinery below is generic —
    it takes any bag of closed rings and fills them by even-odd parity — but
    nothing is handed to it here, so the pass never runs. */
-var REGION = {
-  rings: [], cache: new Array(LODS.length),
-  color: new Float32Array([0.086, 0.220, 0.431]), on: true
-};
-
 /* layer 2 = the land borders split off from the coastlines */
 LAYERS.push({
   chains: decode('geo5'), cache: new Array(LODS.length),
@@ -264,83 +258,6 @@ function buildLOD(chains, idx){
   return { count: segs, data: data, start: start };
 }
 
-/* ---------- the filled region ----------
-   One instance per boundary segment, each drawing the triangle
-   (sub-camera point, A, B). Over a closed ring those triangles XOR into
-   exactly the ring's even-odd interior: the interior edges are shared
-   pairwise and cancel, whatever they do in space, so nothing has to be
-   triangulated and the fill has no tessellation error at all — its outline
-   is the boundary itself, at full precision.
-
-   Points are stored once, and B is read from the same buffer one point
-   further along. Sharing the bytes is what makes A of one instance and B of
-   the previous bit-identical; computing B from a delta would leave the two
-   an ulp apart and the cancellation would not be exact. A point whose flag
-   is 0 closes a ring and emits a degenerate triangle. */
-var RSTRIDE = 28;                                     // 3 hi + 3 lo + 1 flag
-
-function buildRegionLOD(idx){
-  var tolQ = LODS[idx].tol/QS, step = LODS[idx].step;
-  var src = REGION.rings, simp = [], c, i, j, n, k, q, t, d, v, hi, ch;
-
-  for (c = 0; c < src.length; c++){
-    ch = src[c];
-    if (tolQ > 0){
-      n = ch.length/2;
-      var closed = new Int32Array(2*(n+1));
-      closed.set(ch); closed[2*n] = ch[0]; closed[2*n+1] = ch[1];
-      var s = simplify(closed, tolQ);
-      if (s.length/2 < 4) continue;                   // collapses at this level
-      ch = s.subarray(0, s.length - 2);
-    }
-    simp.push(ch);
-  }
-
-  var total = 0, lonA, latA, dlon, dlat;
-  for (c = 0; c < simp.length; c++){
-    ch = simp[c]; n = ch.length/2;
-    for (i = 0; i < n; i++){
-      j = (i+1) % n;
-      total += subCount(ch[2*i], ch[2*i+1], ch[2*j], ch[2*j+1], step);
-    }
-    total++;                                          // the closing point
-  }
-
-  var data = new Float32Array(7*total), w = 0, P = [0,0,0];
-  for (c = 0; c < simp.length; c++){
-    ch = simp[c]; n = ch.length/2;
-    for (i = 0; i < n; i++){
-      j = (i+1) % n;
-      lonA = ch[2*i]*QS; latA = ch[2*i+1]*QS;
-      dlon = ch[2*j]*QS - lonA;
-      if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
-      dlat = ch[2*j+1]*QS - latA;
-      k = subCount(ch[2*i], ch[2*i+1], ch[2*j], ch[2*j+1], step);
-      for (q = 0; q < k; q++){
-        t = q/k;
-        sph(lonA + dlon*t, latA + dlat*t, P);
-        for (d = 0; d < 3; d++){
-          v = P[d]; hi = Math.fround(v);
-          data[w+d] = hi; data[w+3+d] = Math.fround(v - hi);
-        }
-        data[w+6] = 1;
-        w += 7;
-      }
-    }
-    sph(ch[0]*QS, ch[1]*QS, P);                       // t = 0 above gives the same bits
-    for (d = 0; d < 3; d++){
-      v = P[d]; hi = Math.fround(v);
-      data[w+d] = hi; data[w+3+d] = Math.fround(v - hi);
-    }
-    data[w+6] = 0;
-    w += 7;
-  }
-  return { count: total ? total - 1 : 0, data: data };
-}
-
-/* ============================================================
-   3. WEBGL
-   ============================================================ */
 function sh(type, src){
   var o = gl.createShader(type);
   gl.shaderSource(o, src); gl.compileShader(o);
@@ -377,8 +294,8 @@ var SPH_VS = '#version 300 es\n' + [
 var SPH_FS = '#version 300 es\n' + [
 'precision highp float;',
 'in vec2 vNdc;',
-'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot, uAlbedo;',
-'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR, uMask;',
+'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot;',
+'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR;',
 'uniform sampler2D uRelief;',
 'uniform vec2 uTexel, uTexSize;',
 'uniform float uReliefAmt, uSlope;',
@@ -391,7 +308,7 @@ var SPH_FS = '#version 300 es\n' + [
 '  vec3 bg = mix(uBgBot, uBgTop, vNdc.y*0.5 + 0.5);',
 '  float gr = length(vec2(dFdx(disc), dFdy(disc)));',
 '  float cov = clamp(disc/max(gr, 1e-30) + 0.5, 0.0, 1.0);',
-'  if (ct <= 0.0 || cov <= 0.0){ frag = uMask > 0.5 ? vec4(0.0) : vec4(bg, 1.0); return; }',
+'  if (ct <= 0.0 || cov <= 0.0){ frag = vec4(bg, 1.0); return; }',
 '  float sq = sqrt(max(disc, 0.0));',
 '  float t  = uC2 / max(ct*uR + sq, 1e-20);',
 '  vec3 p = t*d;',
@@ -425,52 +342,8 @@ var SPH_FS = '#version 300 es\n' + [
 '    float hs = dot(nl, vec3(-0.5, 0.5, 0.7071068));',   // light from the north-west
 '    shade *= clamp(1.0 + uReliefAmt*(hs - 0.7071068), 0.35, 1.6);',
 '  }',
-'  frag = uMask > 0.5 ? vec4(uAlbedo*shade, cov)',
-'                     : vec4(mix(bg, vec3(shade), cov), 1.0);',
+'  frag = vec4(mix(bg, vec3(shade), cov), 1.0);',
 '}'].join('\n');
-
-/* the filled region: one triangle per boundary segment, apex at the point
-   under the camera, XORed into the stencil buffer */
-var FAN_VS = '#version 300 es\n' + [
-'precision highp float;',
-'layout(location=0) in vec3 aHi;',
-'layout(location=1) in vec3 aLo;',
-'layout(location=2) in float aFlag;',
-'layout(location=3) in vec3 bHi;',
-'layout(location=4) in vec3 bLo;',
-'uniform vec3 uCamHi, uCamLo, uCamDir;',
-'uniform mat3 uView;',
-'uniform float uTanHF, uAspect, uHorizK, uSinH, uH;',
-/* Beyond the horizon a point is slid along its meridian from the camera
-   onto the horizon circle. Consecutive points keep their order around that
-   circle, so the fan still traces the visible part of the region — the
-   silhouette clip falls out of the projection instead of being computed. */
-'vec3 clampHorizon(vec3 rel){',
-'  if (dot(rel, uCamDir) + uHorizK >= 0.0) return rel;',
-'  vec3 P = rel + uCamHi + uCamLo;',
-'  vec3 w = P - uCamDir*dot(P, uCamDir);',
-'  float wl = length(w);',
-'  if (wl < 1e-7){',
-'    vec3 t = abs(uCamDir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);',
-'    w = normalize(cross(uCamDir, t));',
-'  } else w /= wl;',
-'  return w*uSinH - uCamDir*uHorizK;',
-'}',
-'void main(){',
-'  if (aFlag < 0.5){ gl_Position = vec4(0.0, 0.0, 0.0, 1.0); return; }',
-'  vec3 rel = gl_VertexID == 0 ? -uH*uCamDir',
-'           : gl_VertexID == 1 ? clampHorizon((aHi - uCamHi) + (aLo - uCamLo))',
-'                              : clampHorizon((bHi - uCamHi) + (bLo - uCamLo));',
-'  vec3 v = uView*rel;',
-/* every point of the sphere and of its interior has v.z <= -h, so w stays
-   positive and nothing is ever clipped by the near plane */
-'  gl_Position = vec4(v.x/(uTanHF*uAspect), v.y/uTanHF, 0.0, -v.z);',
-'}'].join('\n');
-
-var FAN_FS = '#version 300 es\n' + [
-'precision highp float;',
-'out vec4 frag;',
-'void main(){ frag = vec4(1.0); }'].join('\n');
 
 /* pass 2: instanced lines, constant width in pixels, positions in emulated
    double precision (hi/lo split, subtracted relative to the eye) */
@@ -543,10 +416,10 @@ var LIN_FS = '#version 300 es\n' + [
 '  frag = vec4(uLineColor * mix(0.86, 1.0, diff), a);',
 '}'].join('\n');
 
-var pSph, pLin, pFan, uSph, uLin, uFan;
-try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); pFan = prog(FAN_VS, FAN_FS); }
+var pSph, pLin, uSph, uLin;
+try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); }
 catch(e){ fail('Erro de shader: ' + e.message); return; }
-uSph = U(pSph); uLin = U(pLin); uFan = U(pFan);
+uSph = U(pSph); uLin = U(pLin);
 
 /* elevation raster, decoded by the browser straight out of the embedded PNG */
 var reliefTex = null;
@@ -591,24 +464,6 @@ function uploadLOD(L, idx){
 
 /* B is the same buffer read one point further along — the two attributes
    alias the same bytes, which is what keeps the fan's shared edges exact */
-function uploadRegionLOD(idx){
-  var b = buildRegionLOD(idx);
-  var vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-  var vbo = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-  gl.bufferData(gl.ARRAY_BUFFER, b.data, gl.STATIC_DRAW);
-  var at = [[0,3,0], [1,3,12], [2,1,24], [3,3,RSTRIDE], [4,3,RSTRIDE+12]];
-  for (var i = 0; i < at.length; i++){
-    gl.enableVertexAttribArray(at[i][0]);
-    gl.vertexAttribPointer(at[i][0], at[i][1], gl.FLOAT, false, RSTRIDE, at[i][2]);
-    gl.vertexAttribDivisor(at[i][0], 1);
-  }
-  gl.bindVertexArray(null);
-  REGION.cache[idx] = { vao: vao, vbo: vbo, count: b.count };
-  return REGION.cache[idx];
-}
-
 /* ============================================================
    4. CAMERA - all state kept in double precision on the CPU
    ============================================================ */
@@ -850,75 +705,6 @@ function lodAt(L, best){
 }
 function pickLOD(L){ return lodAt(L, pixelLOD()); }
 
-/* ---------- how much of the sphere around the view is empty ----------
-   The fan cannot be culled the way the lines are: every segment of a ring
-   has to be drawn or the parity is wrong. But a segment that is off screen
-   costs a wedge running clear across it, so a boundary far away is the
-   expensive case, and it is also the one where detail cannot be seen.
-
-   So the region picks its level by clearance instead of by pixels. The
-   cells the boundary occupies are known, which bounds from below how far
-   the nearest boundary is; a level whose simplification cannot move the
-   boundary that far is indistinguishable from the exact one. */
-var RCELL = 1;                              // degrees; the 4° grid is too coarse here
-var regDir = null, regRad = null, regN = 0;
-(function(){
-  var NX = Math.round(360/RCELL), NY = Math.round(180/RCELL);
-  var mark = new Uint8Array(NX*NY), c, i, j, n, k, q, r, lonA, latA, dlon, dlat, lo, la;
-  function put(lon, lat){
-    var x = (lon + 180) % 360; if (x < 0) x += 360;
-    x = (x/RCELL)|0; if (x >= NX) x = NX - 1;
-    var y = ((lat + 90)/RCELL)|0;
-    if (y < 0) y = 0; else if (y >= NY) y = NY - 1;
-    mark[y*NX + x] = 1;
-  }
-  for (c = 0; c < REGION.rings.length; c++){
-    r = REGION.rings[c]; n = r.length/2;
-    for (i = 0; i < n; i++){
-      j = (i+1) % n;
-      lonA = r[2*i]*QS; latA = r[2*i+1]*QS;
-      dlon = r[2*j]*QS - lonA;
-      if (dlon > 180) dlon -= 360; else if (dlon < -180) dlon += 360;
-      dlat = r[2*j+1]*QS - latA;
-      k = subCount(r[2*i], r[2*i+1], r[2*j], r[2*j+1], RCELL*0.5);   // no cell is skipped
-      for (q = 0; q < k; q++) put(lonA + dlon*q/k, latA + dlat*q/k);
-    }
-  }
-  for (i = 0; i < mark.length; i++) if (mark[i]) regN++;
-  regDir = new Float32Array(3*regN); regRad = new Float32Array(regN);
-  var cc = [0,0,0], pp = [0,0,0], w = 0, u, v, dd, worst;
-  for (i = 0; i < mark.length; i++){
-    if (!mark[i]) continue;
-    lo = (i % NX)*RCELL - 180; la = ((i/NX)|0)*RCELL - 90;
-    sph(lo + RCELL/2, la + RCELL/2, cc);
-    worst = 1;
-    for (u = 0; u <= 2; u++) for (v = 0; v <= 2; v++){
-      sph(lo + RCELL*u/2, la + RCELL*v/2, pp);
-      dd = cc[0]*pp[0] + cc[1]*pp[1] + cc[2]*pp[2];
-      if (dd < worst) worst = dd;
-    }
-    regDir[3*w] = cc[0]; regDir[3*w+1] = cc[1]; regDir[3*w+2] = cc[2];
-    regRad[w] = Math.acos(Math.max(-1, Math.min(1, worst))) + 0.001;
-    w++;
-  }
-})();
-
-function pickRegionLOD(viewRho){
-  var best = pixelLOD(), i, d, a, clear = Infinity;
-  for (i = 0; i < regN; i++){
-    d = regDir[3*i]*camU[0] + regDir[3*i+1]*camU[1] + regDir[3*i+2]*camU[2];
-    a = Math.acos(Math.max(-1, Math.min(1, d))) - regRad[i];
-    if (a < clear) clear = a;
-  }
-  var slack = clear - viewRho;
-  if (slack > 0){
-    for (i = LODS.length - 1; i > best; i--){
-      if (LODS[i].tol*DEG*1.5 < slack){ best = i; break; }
-    }
-  }
-  return lodAt(REGION, best);
-}
-
 var BG_TOP = new Float32Array([0.918, 0.929, 0.937]);
 var BG_BOT = new Float32Array([0.839, 0.855, 0.871]);
 
@@ -967,7 +753,7 @@ function frame(ts){
    the instance attributes at its byte offset — WebGL2 has no baseInstance. */
 var MAXR = 64;
 var rngS = new Int32Array(MAXR), rngC = new Int32Array(MAXR), rngN = 0;
-var capTmp = [0,0,0], drawn = 0, fill = 0;
+var capTmp = [0,0,0], drawn = 0;
 
 /* angular radius, about the sub-camera point, of a cap containing
    everything currently on screen */
@@ -1051,7 +837,6 @@ function draw(){
   gl.uniform1f(uSph.uR, R);
   gl.uniform1f(uSph.uInvR, 1/R);
   gl.uniform1f(uSph.uHOverR, h/R);
-  gl.uniform1f(uSph.uMask, 0.0);
 
   /* The raster is the one part of this with a finite resolution, so it fades
      out once the screen is magnifying it past roughly 8x — past that it is
@@ -1072,51 +857,6 @@ function draw(){
   }
   gl.uniform1f(uSph.uReliefAmt, ramt);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-  /* ---- the filled region ----
-     XOR every fan triangle into the stencil buffer, then run the sphere
-     shader a second time where the parity came out odd. Going back through
-     the sphere shader is what gives the fill the globe's own shading, its
-     exact silhouette and its analytic edge at the limb for free; the region's
-     own outline is antialiased by the multisampled stencil. */
-  fill = 0;
-  var rlod = REGION.on ? pickRegionLOD(viewRho) : null;
-  if (rlod && rlod.count){
-    gl.enable(gl.STENCIL_TEST);
-    gl.clearStencil(0);
-    gl.clear(gl.STENCIL_BUFFER_BIT);
-    gl.colorMask(false, false, false, false);
-    gl.stencilFunc(gl.ALWAYS, 0, 0xff);
-    gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
-
-    gl.useProgram(pFan);
-    gl.uniform3fv(uFan.uCamHi, camHi);
-    gl.uniform3fv(uFan.uCamLo, camLo);
-    gl.uniform3f(uFan.uCamDir, camU[0], camU[1], camU[2]);
-    gl.uniformMatrix3fv(uFan.uView, false, viewMat);
-    gl.uniform1f(uFan.uTanHF, TANHF);
-    gl.uniform1f(uFan.uAspect, aspect);
-    gl.uniform1f(uFan.uHorizK, C2/R);
-    gl.uniform1f(uFan.uSinH, Math.sqrt(C2)/R);
-    gl.uniform1f(uFan.uH, h);
-    gl.bindVertexArray(rlod.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, rlod.count);
-    fill = rlod.count;
-
-    gl.colorMask(true, true, true, true);
-    gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
-    gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
-    gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.useProgram(pSph);
-    gl.uniform1f(uSph.uMask, 1.0);
-    gl.uniform3fv(uSph.uAlbedo, REGION.color);
-    gl.bindVertexArray(emptyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.uniform1f(uSph.uMask, 0.0);
-    gl.disable(gl.STENCIL_TEST);
-    gl.disable(gl.BLEND);
-  }
 
   var ORDER = [1, 2, 0];                   // subdivisions, land borders, coast on top
   var started = false, li, L, lod, halfW;
@@ -1163,17 +903,16 @@ function draw(){
 resize();
 updateCam();
 uploadLOD(LAYERS[0], 3);          // coarse country level before the first frame
-uploadRegionLOD(3);
 requestRender();
 
 /* the rest builds in the background; subdivisions land early so the button
-   never opens onto an empty globe. -1 is the region. */
+   never opens onto an empty globe */
 var pending = [[2,2],[0,2],[1,3],[2,1],[0,1],[1,2],[2,0],[0,0],[1,1],[1,0],[2,4],[0,4],[1,4]];
 (function next(){
   if (!pending.length) return;
   var j = pending.shift();
   setTimeout(function(){
-    if (j[0] < 0) uploadRegionLOD(j[1]); else uploadLOD(LAYERS[j[0]], j[1]);
+    uploadLOD(LAYERS[j[0]], j[1]);
     requestRender(); next();
   }, 30);
 })();
@@ -1222,7 +961,7 @@ window.__globe = {
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
              detail: LAYERS[1].on, borders: LAYERS[2].on,
              relief: RELIEF_ON, reliefReady: !!reliefTex,
-             drawn: drawn, fill: fill, ranges: rngN,
+             drawn: drawn, ranges: rngN,
              lods: LAYERS.map(function(L){ return L.cache.map(function(c){ return c ? c.count : null; }); }),
              vp: [vpW, vpH], dpr: dpr };
   },

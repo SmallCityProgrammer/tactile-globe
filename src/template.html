@@ -14,7 +14,6 @@
        transition:background .14s,color .14s,border-color .14s}
   #ui button:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
   #ui button[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
-  #empire[aria-pressed="true"]{background:#16386e;color:#e8edf6;border-color:#16386e}
   #ui button:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
 </style>
 <canvas id="gl"></canvas>
@@ -23,12 +22,9 @@
   <button id="relief" type="button" aria-pressed="false">relief</button>
   <button id="borders" type="button" aria-pressed="true">land borders</button>
   <button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
-  <button id="empire" type="button" aria-pressed="true">napoleonic empire</button>
 </div>
 <script id="geo" type="application/octet-stream">__DATA_B64__</script>
 <script id="geo2" type="application/octet-stream">__DATA2_B64__</script>
-<script id="geo3" type="application/octet-stream">__DATA3_B64__</script>
-<script id="geo4" type="application/octet-stream">__DATA4_B64__</script>
 <script id="geo5" type="application/octet-stream">__DATA5_B64__</script>
 <script id="reliefpng" type="application/octet-stream">__RELIEF_B64__</script>
 <script>
@@ -106,26 +102,15 @@ var LAYERS = [
     color: new Float32Array([0.612, 0.643, 0.667]), width: 0.90, on: false }
 ];
 
-/* The Napoleonic Empire at its height (1812), as closed rings filled by
-   even-odd parity. Parity is what makes a partial country expressible: the
-   ring of Germany followed by the ring of Brandenburg is Germany without
-   Brandenburg, with no clipping and no boolean geometry. */
+/* No filled region ships in this build. The machinery below is generic —
+   it takes any bag of closed rings and fills them by even-odd parity — but
+   nothing is handed to it here, so the pass never runs. */
 var REGION = {
-  rings: decode('geo3'), cache: new Array(LODS.length),
+  rings: [], cache: new Array(LODS.length),
   color: new Float32Array([0.086, 0.220, 0.431]), on: true
 };
 
-/* layer 2 = the empire's frontier, in the same colour as the fill. The
-   stencil is one bit per pixel, so the fill's edge is hard; this draws over
-   it with the line shader's analytic coverage, which is what makes the
-   outline smooth. It is the dissolved boundary, not the rings — a stretch
-   carried by two rings has the same parity on both sides and is interior. */
-LAYERS.push({
-  chains: decode('geo4'), cache: new Array(LODS.length),
-  color: REGION.color, width: 1.15, on: true
-});
-
-/* layer 3 = the land borders split off from the coastlines */
+/* layer 2 = the land borders split off from the coastlines */
 LAYERS.push({
   chains: decode('geo5'), cache: new Array(LODS.length),
   color: LAYERS[0].color, width: LAYERS[0].width, on: true
@@ -1133,7 +1118,7 @@ function draw(){
     gl.disable(gl.BLEND);
   }
 
-  var ORDER = [2, 1, 3, 0];                // empire outline, subdivisions, land borders, coast on top
+  var ORDER = [1, 2, 0];                   // subdivisions, land borders, coast on top
   var started = false, li, L, lod, halfW;
   for (li = 0; li < ORDER.length; li++){
     L = LAYERS[ORDER[li]];
@@ -1178,13 +1163,12 @@ function draw(){
 resize();
 updateCam();
 uploadLOD(LAYERS[0], 3);          // coarse country level before the first frame
-uploadLOD(LAYERS[2], 3);          // and the empire with it, so it is never missing
 uploadRegionLOD(3);
 requestRender();
 
 /* the rest builds in the background; subdivisions land early so the button
    never opens onto an empty globe. -1 is the region. */
-var pending = [[3,2],[0,2],[-1,2],[2,2],[1,3],[3,1],[0,1],[-1,1],[2,1],[1,2],[3,0],[0,0],[-1,0],[2,0],[1,1],[1,0],[3,4],[-1,4],[2,4],[0,4],[1,4]];
+var pending = [[2,2],[0,2],[1,3],[2,1],[0,1],[1,2],[2,0],[0,0],[1,1],[1,0],[2,4],[0,4],[1,4]];
 (function next(){
   if (!pending.length) return;
   var j = pending.shift();
@@ -1199,26 +1183,24 @@ var btn = document.getElementById('detail');
 function setDetail(on){
   LAYERS[1].on = on;
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on && !LAYERS[2].on) setBorders(true);
   requestRender();
 }
 btn.addEventListener('click', function(){ setDetail(!LAYERS[1].on); btn.blur(); });
 
-var btnE = document.getElementById('empire');
-function setEmpire(on){
-  REGION.on = on;
-  LAYERS[2].on = on;
-  btnE.setAttribute('aria-pressed', on ? 'true' : 'false');
-  requestRender();
-}
-btnE.addEventListener('click', function(){ setEmpire(!REGION.on); btnE.blur(); });
-
 var btnB = document.getElementById('borders');
+/* Subdivisions and land borders are coupled. The admin_0 segments were
+   subtracted out of the subdivision layer, so wherever a state line runs
+   along a national one there is no line left in it — drawing subdivisions
+   without the country borders underneath erases the countries from the
+   middle of a continent and flattens the hierarchy into one weight. */
 function setBorders(on){
-  LAYERS[3].on = on;
+  LAYERS[2].on = on;
   btnB.setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (!on && LAYERS[1].on) setDetail(false);
   requestRender();
 }
-btnB.addEventListener('click', function(){ setBorders(!LAYERS[3].on); btnB.blur(); });
+btnB.addEventListener('click', function(){ setBorders(!LAYERS[2].on); btnB.blur(); });
 
 var btnR = document.getElementById('relief');
 function setRelief(on){
@@ -1230,8 +1212,7 @@ btnR.addEventListener('click', function(){ setRelief(!RELIEF_ON); btnR.blur(); }
 
 window.addEventListener('keydown', function(e){
   if (e.key === 'd' || e.key === 'D'){ setDetail(!LAYERS[1].on); }
-  else if (e.key === 'n' || e.key === 'N'){ setEmpire(!REGION.on); }
-  else if (e.key === 'b' || e.key === 'B'){ setBorders(!LAYERS[3].on); }
+  else if (e.key === 'b' || e.key === 'B'){ setBorders(!LAYERS[2].on); }
   else if (e.key === 'r' || e.key === 'R'){ setRelief(!RELIEF_ON); }
 });
 
@@ -1239,11 +1220,10 @@ window.__globe = {
   render: function(){ resize(); updateCam(); draw(); },
   info: function(){
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
-             detail: LAYERS[1].on, empire: REGION.on, borders: LAYERS[3].on,
+             detail: LAYERS[1].on, borders: LAYERS[2].on,
              relief: RELIEF_ON, reliefReady: !!reliefTex,
              drawn: drawn, fill: fill, ranges: rngN,
              lods: LAYERS.map(function(L){ return L.cache.map(function(c){ return c ? c.count : null; }); }),
-             rlods: REGION.cache.map(function(c){ return c ? c.count : null; }),
              vp: [vpW, vpH], dpr: dpr };
   },
   set: function(o){
@@ -1255,7 +1235,6 @@ window.__globe = {
     if (o.relief !== undefined) setRelief(!!o.relief);
     if (o.slope !== undefined) RELIEF_SLOPE = o.slope;
     if (o.amt !== undefined) RELIEF_AMT = o.amt;
-    if (o.empire !== undefined) setEmpire(!!o.empire);
     anchor = null; updateCam(); requestRender();
   }
 };

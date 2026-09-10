@@ -15,10 +15,37 @@
   #ui button:hover{background:rgba(255,255,255,.96);border-color:rgba(92,99,106,.42)}
   #ui button[aria-pressed="true"]{background:#5c636a;color:#eef1f2;border-color:#5c636a}
   #ui button:focus-visible{outline:2px solid #5c636a;outline-offset:2px}
+  #labels{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  #labels span{
+    position:absolute;white-space:nowrap;
+    font:500 12px/1 system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:#3d444a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 6px #fff;
+    transform:translate(-50%,-50%);
+  }
+  #labels span.city{transform:translate(0,-50%)}
+  #labels span.country{
+    font-weight:600;font-size:12.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:#2f363c;
+  }
+  #coords{
+    position:fixed;left:20px;bottom:20px;display:none;
+    font:500 11.5px/1 ui-monospace,"SFMono-Regular",Consolas,monospace;
+    letter-spacing:.02em;color:#5c636a;
+    background:rgba(255,255,255,.72);border:1px solid rgba(92,99,106,.26);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    padding:9px 12px;border-radius:6px;
+  }
+  #coords.on{display:block}
 </style>
 <canvas id="gl"></canvas>
 <div id="msg"></div>
+<div id="labels"></div>
+<div id="coords"></div>
 <div id="ui">
+  <button id="grid" type="button" aria-pressed="false">grid</button>
+  <button id="coordsbtn" type="button" aria-pressed="false">lon / lat</button>
+  <button id="cities" type="button" aria-pressed="false">cities</button>
+  <button id="names" type="button" aria-pressed="false">labels</button>
   <button id="relief" type="button" aria-pressed="false">relief</button>
   <button id="borders" type="button" aria-pressed="true">land borders</button>
   <button id="detail" type="button" aria-pressed="false">states &amp; provinces</button>
@@ -26,6 +53,7 @@
 <script id="geo" type="application/octet-stream">__DATA_B64__</script>
 <script id="geo2" type="application/octet-stream">__DATA2_B64__</script>
 <script id="geo5" type="application/octet-stream">__DATA5_B64__</script>
+<script id="places" type="application/octet-stream">__PLACES_B64__</script>
 <script id="reliefpng" type="application/octet-stream">__RELIEF_B64__</script>
 <script>
 (function(){
@@ -104,10 +132,86 @@ var LAYERS = [
 /* No filled region ships in this build. The machinery below is generic —
    it takes any bag of closed rings and fills them by even-odd parity — but
    nothing is handed to it here, so the pass never runs. */
+/* ---------- places: country label points and cities ----------
+   Both arrive already ordered by importance, so a zoom threshold is a
+   prefix: showing everything down to rank k is the first cum[k] entries. */
+var PLACES = (function(){
+  var bin = atob(document.getElementById('places').textContent);
+  var m = bin.length, b = new Uint8Array(m), i;
+  for (i = 0; i < m; i++) b[i] = bin.charCodeAt(i);
+  var p = 0, dec = new TextDecoder();
+  function rU(){ var x = 0, sh = 1, c; do { c = b[p++]; x += (c & 127)*sh; sh *= 128; } while (c & 128); return x; }
+  function rV(){ var x = rU(); return (x % 2) ? -(x + 1)/2 : x/2; }
+  function set(){
+    var cnt = rU(), cum = new Int32Array(16), k;
+    for (k = 0; k < 16; k++) cum[k] = rU();
+    var pos = new Float64Array(3*cnt), names = new Array(cnt), rank = new Uint8Array(cnt);
+    var lx = 0, ly = 0, o = [0,0,0], tier = 0;
+    for (k = 0; k < cnt; k++){
+      while (tier < 15 && k >= cum[tier]) tier++;
+      rank[k] = tier;
+      lx += rV(); ly += rV();
+      sph(lx/1e5, ly/1e5, o);
+      pos[3*k] = o[0]; pos[3*k+1] = o[1]; pos[3*k+2] = o[2];
+      var L = rU();
+      names[k] = dec.decode(b.subarray(p, p + L)); p += L;
+    }
+    return { n: cnt, cum: cum, pos: pos, names: names, rank: rank };
+  }
+  var co = set(), ci = set();
+  return { countries: co, cities: ci };
+})();
+
+/* ---------- graticule ----------
+   The only layer with no source: parallels and meridians every 15 degrees,
+   sampled coarsely and left to the same sagitta densification the borders
+   use. minStep keeps it from being subdivided to border density — a grid
+   line is analytic, and 60,000 segments already draw it exactly. */
+function meridian(lon){
+  var a = [], v;
+  for (v = -90; v <= 90; v += 2) a.push(Math.round(lon*1e6), Math.round(v*1e6));
+  return [new Int32Array(a)];
+}
+/* A parallel is cut into quadrants on purpose. Simplification flattens a
+   constant-latitude line to its two endpoints, and a chain spanning the full
+   360 degrees then unwraps across the antimeridian to a span of zero — the
+   whole circle collapses to one degenerate segment. No quadrant spans more
+   than 180, so none of them can wrap. */
+function parallel(lat){
+  var out = [], q, a, v;
+  for (q = 0; q < 4; q++){
+    a = [];
+    for (v = -180 + q*90; v <= -90 + q*90; v += 2) a.push(Math.round(v*1e6), Math.round(lat*1e6));
+    out.push(new Int32Array(a));
+  }
+  return out;
+}
+var GRID = (function(){
+  var out = [], v;
+  for (v = -180; v < 180; v += 15) out = out.concat(meridian(v));
+  for (v = -75; v <= 75; v += 15) out = out.concat(parallel(v));
+  return out;
+})();
+var GRID_MARKED = (function(){
+  var out = [], k, L = [23.43663, -23.43663, 66.56337, -66.56337];
+  for (k = 0; k < L.length; k++) out = out.concat(parallel(L[k]));
+  return out;
+})();
+
 /* layer 2 = the land borders split off from the coastlines */
 LAYERS.push({
   chains: decode('geo5'), cache: new Array(LODS.length),
   color: LAYERS[0].color, width: LAYERS[0].width, on: true
+});
+
+/* layers 3 and 4 = the graticule, and the four latitudes worth naming */
+LAYERS.push({
+  chains: GRID, cache: new Array(LODS.length), minStep: 0.12,
+  color: new Float32Array([0.706, 0.741, 0.769]), width: 0.75, on: false
+});
+LAYERS.push({
+  chains: GRID_MARKED, cache: new Array(LODS.length), minStep: 0.12,
+  color: new Float32Array([0.557, 0.604, 0.639]), width: 1.0, on: false
 });
 
 /* ---------- spatial grid, for view culling ----------
@@ -198,8 +302,9 @@ function sph(lon, lat, o){
   o[0] = cl*Math.cos(lo); o[1] = Math.sin(la); o[2] = -cl*Math.sin(lo);
 }
 
-function buildLOD(chains, idx){
+function buildLOD(chains, idx, minStep){
   var tolQ = LODS[idx].tol/QS, step = LODS[idx].step;
+  if (minStep && step < minStep) step = minStep;
   var simp = new Array(chains.length), c, i, n, s;
 
   for (c = 0; c < chains.length; c++) simp[c] = simplify(chains[c], tolQ);
@@ -416,10 +521,52 @@ var LIN_FS = '#version 300 es\n' + [
 '  frag = vec4(uLineColor * mix(0.86, 1.0, diff), a);',
 '}'].join('\n');
 
-var pSph, pLin, uSph, uLin;
-try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); }
+/* pass 3: city dots. Same eye-relative precision and the same exact horizon
+   test as the lines; a quad per instance, sized in pixels, round by distance
+   in the fragment. */
+var PT_VS = '#version 300 es\n' + [
+'precision highp float;',
+'layout(location=0) in vec3 aHi;',
+'layout(location=1) in vec3 aLo;',
+'layout(location=2) in float aRank;',
+'uniform vec3 uCamHi, uCamLo, uCamDir;',
+'uniform mat3 uView;',
+'uniform vec2 uVp;',
+'uniform float uTanHF, uAspect, uNear, uHorizK, uPx;',
+'out vec2 vC;',
+'out float vR;',
+'void main(){',
+'  vec3 rel = (aHi - uCamHi) + (aLo - uCamLo);',
+'  vec3 v = uView*rel;',
+'  if (dot(rel, uCamDir) + uHorizK < 0.0 || v.z > -uNear){',
+'    vC = vec2(0.0); vR = 0.0; gl_Position = vec4(2.0, 2.0, 0.0, 1.0); return;',
+'  }',
+'  vec2 ndc = vec2(v.x/(-v.z)/(uTanHF*uAspect), v.y/(-v.z)/uTanHF);',
+'  vec2 px  = (ndc*0.5 + 0.5)*uVp;',
+'  float r  = uPx*mix(1.35, 0.72, clamp(aRank/10.0, 0.0, 1.0));',
+'  vec2 corner = vec2(float(gl_VertexID & 1)*2.0 - 1.0,',
+'                     float((gl_VertexID >> 1) & 1)*2.0 - 1.0);',
+'  vC = corner*(r + 1.0);',
+'  vR = r;',
+'  gl_Position = vec4(((px + vC)/uVp)*2.0 - 1.0, 0.0, 1.0);',
+'}'].join('\n');
+
+var PT_FS = '#version 300 es\n' + [
+'precision highp float;',
+'in vec2 vC;',
+'in float vR;',
+'uniform vec3 uDot;',
+'out vec4 frag;',
+'void main(){',
+'  float a = clamp(vR - length(vC) + 0.5, 0.0, 1.0);',
+'  if (a <= 0.0) discard;',
+'  frag = vec4(uDot, a);',
+'}'].join('\n');
+
+var pSph, pLin, pPt, uSph, uLin, uPt;
+try { pSph = prog(SPH_VS, SPH_FS); pLin = prog(LIN_VS, LIN_FS); pPt = prog(PT_VS, PT_FS); }
 catch(e){ fail('Erro de shader: ' + e.message); return; }
-uSph = U(pSph); uLin = U(pLin);
+uSph = U(pSph); uLin = U(pLin); uPt = U(pPt);
 
 /* elevation raster, decoded by the browser straight out of the embedded PNG */
 var reliefTex = null;
@@ -443,9 +590,31 @@ var RELIEF_W = 0, RELIEF_H = 0;
   im.src = 'data:image/png;base64,' + document.getElementById('reliefpng').textContent;
 })();
 
+/* one instance per city, in importance order */
+var cityVao = null;
+(function(){
+  var C = PLACES.cities, cnt = C.n, data = new Float32Array(7*cnt), k, d, v, hi;
+  for (k = 0; k < cnt; k++){
+    for (d = 0; d < 3; d++){
+      v = C.pos[3*k + d]; hi = Math.fround(v);
+      data[7*k + d]     = hi;
+      data[7*k + 3 + d] = Math.fround(v - hi);
+    }
+    data[7*k + 6] = C.rank[k];
+  }
+  cityVao = gl.createVertexArray();
+  gl.bindVertexArray(cityVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);  gl.vertexAttribDivisor(0, 1);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 28, 12); gl.vertexAttribDivisor(1, 1);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 28, 24); gl.vertexAttribDivisor(2, 1);
+  gl.bindVertexArray(null);
+})();
+
 var emptyVao = gl.createVertexArray();
 function uploadLOD(L, idx){
-  var b = buildLOD(L.chains, idx);
+  var b = buildLOD(L.chains, idx, L.minStep);
   var vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
   var vbo = gl.createBuffer();
@@ -708,6 +877,8 @@ function pickLOD(L){ return lodAt(L, pixelLOD()); }
 var BG_TOP = new Float32Array([0.918, 0.929, 0.937]);
 var BG_BOT = new Float32Array([0.839, 0.855, 0.871]);
 
+var GRID_ON = false, CITIES_ON = false, NAMES_ON = false, COORDS_ON = false;
+var CITY_DOT = new Float32Array([0.267, 0.310, 0.345]);
 var RELIEF_ON = false;
 var RELIEF_AMT = 1.0;        // overall strength
 var RELIEF_SLOPE = 2.5;      // vertical exaggeration
@@ -816,6 +987,115 @@ function drawRange(first, count){
   drawn += count;
 }
 
+/* ---------- which cities are worth showing at this altitude ----------
+   The set is stored in importance order, so this is a count, not a filter. */
+var CITY_H = [2.6, 1.3, 0.65, 0.32, 0.16, 0.16, 0.075, 0.032, 0.013, 0.005, 0.0018];
+function cityCount(){
+  var best = -1, k;
+  for (k = 0; k < CITY_H.length; k++) if (h <= CITY_H[k]) best = k;
+  return best < 0 ? 0 : PLACES.cities.cum[best];
+}
+
+/* ---------- labels ----------
+   DOM over the canvas rather than a glyph atlas in WebGL. The browser
+   already hints and kerns; the hard part was never drawing the letters, it
+   is choosing which names fit. Candidates are culled by the same exact
+   horizon test the geometry uses, projected in double, sorted by rank, then
+   placed greedily against the boxes already taken. */
+var LBOX = document.getElementById('labels');
+var lbPool = [], lbCtx = null, lbW = new Map(), lbCand = [];
+var MAXLB = 90;
+
+function textWidth(t, cls){
+  var key = cls + '|' + t, v = lbW.get(key);
+  if (v !== undefined) return v;
+  if (!lbCtx) lbCtx = document.createElement('canvas').getContext('2d');
+  if (cls === 'country'){
+    lbCtx.font = '600 12.5px system-ui, sans-serif';
+    v = lbCtx.measureText(t.toUpperCase()).width + t.length*0.75;   // letter-spacing
+  } else {
+    lbCtx.font = '500 12px system-ui, sans-serif';
+    v = lbCtx.measureText(t).width;
+  }
+  lbW.set(key, v);
+  return v;
+}
+
+function gather(set, count, cls, bias){
+  var cw = canvas.clientWidth, chh = canvas.clientHeight, asp = cw/chh;
+  var invR = 1/R, k, x, y, z, rx, ry, rz, vx, vy, vz, sx, sy;
+  for (k = 0; k < count; k++){
+    x = set.pos[3*k]; y = set.pos[3*k+1]; z = set.pos[3*k+2];
+    if (x*camU[0] + y*camU[1] + z*camU[2] < invR) continue;      // behind the horizon
+    rx = x - camPos[0]; ry = y - camPos[1]; rz = z - camPos[2];
+    vz = rx*camU[0] + ry*camU[1] + rz*camU[2];
+    if (vz > -1e-12) continue;
+    vx = rx*camX[0] + ry*camX[1] + rz*camX[2];
+    vy = rx*camY[0] + ry*camY[1] + rz*camY[2];
+    sx = ((vx/(-vz)/(TANHF*asp))*0.5 + 0.5)*cw;
+    sy = (1 - ((vy/(-vz)/TANHF)*0.5 + 0.5))*chh;
+    if (sx < -80 || sx > cw + 80 || sy < -24 || sy > chh + 24) continue;
+    lbCand.push({ x: sx, y: sy, t: set.names[k], c: cls, p: set.rank[k] + bias });
+  }
+}
+
+function layoutLabels(){
+  var i;
+  if (!NAMES_ON){
+    for (i = 0; i < lbPool.length; i++) lbPool[i].style.display = 'none';
+    return;
+  }
+  lbCand.length = 0;
+  gather(PLACES.countries, PLACES.countries.n, 'country', 0);
+  gather(PLACES.cities, cityCount(), 'city', 1.5);
+  lbCand.sort(function(a, b){ return a.p - b.p; });
+
+  var taken = [], used = 0, c, w, x0, y0, x1, y1, j, t, ok, el;
+  for (i = 0; i < lbCand.length && used < MAXLB; i++){
+    c = lbCand[i];
+    w = textWidth(c.t, c.c);
+    if (c.c === 'country'){ x0 = c.x - w/2 - 3; y0 = c.y - 9; }
+    else { x0 = c.x + 6; y0 = c.y - 8; }
+    x1 = x0 + w + 6; y1 = y0 + 17;
+    ok = true;
+    for (j = 0; j < taken.length; j++){
+      t = taken[j];
+      if (x0 < t[2] && x1 > t[0] && y0 < t[3] && y1 > t[1]){ ok = false; break; }
+    }
+    if (!ok) continue;
+    taken.push([x0, y0, x1, y1]);
+    el = lbPool[used];
+    if (!el){ el = document.createElement('span'); LBOX.appendChild(el); lbPool.push(el); }
+    el.className = c.c;
+    el.textContent = c.t;
+    el.style.left = (c.c === 'country' ? c.x : c.x + 6) + 'px';
+    el.style.top = c.y + 'px';
+    el.style.display = 'block';
+    used++;
+  }
+  for (i = used; i < lbPool.length; i++) lbPool[i].style.display = 'none';
+}
+
+/* ---------- the point under the cursor, in degrees ---------- */
+var COORDS = document.getElementById('coords');
+var coordPx = null, coordTmp = [0,0,0];
+function updateCoords(){
+  if (!COORDS_ON) return;
+  var la, lo;
+  if (coordPx && pick(coordPx[0], coordPx[1], coordTmp) === 2){
+    la = Math.asin(Math.max(-1, Math.min(1, coordTmp[1])))/DEG;
+    lo = Math.atan2(-coordTmp[2], coordTmp[0])/DEG;
+  } else { la = lat; lo = lon; }
+  COORDS.textContent =
+    Math.abs(la).toFixed(4) + '° ' + (la >= 0 ? 'N' : 'S') + '   ' +
+    Math.abs(lo).toFixed(4) + '° ' + (lo >= 0 ? 'E' : 'W');
+}
+canvas.addEventListener('pointermove', function(e){
+  var r = canvas.getBoundingClientRect();
+  coordPx = [e.clientX - r.left, e.clientY - r.top];
+  if (COORDS_ON) updateCoords();
+});
+
 function draw(){
   var aspect = vpW/vpH;
   drawn = 0;
@@ -858,7 +1138,7 @@ function draw(){
   gl.uniform1f(uSph.uReliefAmt, ramt);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-  var ORDER = [1, 2, 0];                   // subdivisions, land borders, coast on top
+  var ORDER = [3, 4, 1, 2, 0];             // graticule under everything, coast on top
   var started = false, li, L, lod, halfW;
   for (li = 0; li < ORDER.length; li++){
     L = LAYERS[ORDER[li]];
@@ -898,6 +1178,32 @@ function draw(){
     }
   }
   gl.bindVertexArray(null);
+
+  if (CITIES_ON){
+    var cc = cityCount();
+    if (cc){
+      gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(pPt);
+      gl.uniform3fv(uPt.uCamHi, camHi);
+      gl.uniform3fv(uPt.uCamLo, camLo);
+      gl.uniform3f(uPt.uCamDir, camU[0], camU[1], camU[2]);
+      gl.uniformMatrix3fv(uPt.uView, false, viewMat);
+      gl.uniform2f(uPt.uVp, vpW, vpH);
+      gl.uniform1f(uPt.uTanHF, TANHF);
+      gl.uniform1f(uPt.uAspect, aspect);
+      gl.uniform1f(uPt.uNear, h*0.5);
+      gl.uniform1f(uPt.uHorizK, C2/R);
+      gl.uniform1f(uPt.uPx, 2.6*dpr);
+      gl.uniform3fv(uPt.uDot, CITY_DOT);
+      gl.bindVertexArray(cityVao);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, cc);
+      gl.bindVertexArray(null);
+    }
+  }
+
+  layoutLabels();
+  updateCoords();
 }
 
 resize();
@@ -907,7 +1213,8 @@ requestRender();
 
 /* the rest builds in the background; subdivisions land early so the button
    never opens onto an empty globe */
-var pending = [[2,2],[0,2],[1,3],[2,1],[0,1],[1,2],[2,0],[0,0],[1,1],[1,0],[2,4],[0,4],[1,4]];
+var pending = [[2,2],[0,2],[3,2],[4,2],[1,3],[2,1],[0,1],[3,1],[4,1],[1,2],[2,0],[0,0],
+               [3,0],[4,0],[1,1],[1,0],[2,4],[0,4],[3,4],[4,4],[1,4]];
 (function next(){
   if (!pending.length) return;
   var j = pending.shift();
@@ -941,6 +1248,42 @@ function setBorders(on){
 }
 btnB.addEventListener('click', function(){ setBorders(!LAYERS[2].on); btnB.blur(); });
 
+var btnG = document.getElementById('grid');
+function setGrid(on){
+  GRID_ON = on;
+  LAYERS[3].on = on;
+  LAYERS[4].on = on;
+  btnG.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnG.addEventListener('click', function(){ setGrid(!GRID_ON); btnG.blur(); });
+
+var btnC = document.getElementById('cities');
+function setCities(on){
+  CITIES_ON = on;
+  btnC.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnC.addEventListener('click', function(){ setCities(!CITIES_ON); btnC.blur(); });
+
+var btnN = document.getElementById('names');
+function setNames(on){
+  NAMES_ON = on;
+  btnN.setAttribute('aria-pressed', on ? 'true' : 'false');
+  requestRender();
+}
+btnN.addEventListener('click', function(){ setNames(!NAMES_ON); btnN.blur(); });
+
+var btnX = document.getElementById('coordsbtn');
+function setCoords(on){
+  COORDS_ON = on;
+  COORDS.className = on ? 'on' : '';
+  btnX.setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on) updateCoords();
+  requestRender();
+}
+btnX.addEventListener('click', function(){ setCoords(!COORDS_ON); btnX.blur(); });
+
 var btnR = document.getElementById('relief');
 function setRelief(on){
   RELIEF_ON = on;
@@ -953,6 +1296,10 @@ window.addEventListener('keydown', function(e){
   if (e.key === 'd' || e.key === 'D'){ setDetail(!LAYERS[1].on); }
   else if (e.key === 'b' || e.key === 'B'){ setBorders(!LAYERS[2].on); }
   else if (e.key === 'r' || e.key === 'R'){ setRelief(!RELIEF_ON); }
+  else if (e.key === 'g' || e.key === 'G'){ setGrid(!GRID_ON); }
+  else if (e.key === 'c' || e.key === 'C'){ setCities(!CITIES_ON); }
+  else if (e.key === 'l' || e.key === 'L'){ setNames(!NAMES_ON); }
+  else if (e.key === 'p' || e.key === 'P'){ setCoords(!COORDS_ON); }
 });
 
 window.__globe = {
@@ -960,6 +1307,8 @@ window.__globe = {
   info: function(){
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
              detail: LAYERS[1].on, borders: LAYERS[2].on,
+             grid: GRID_ON, cities: CITIES_ON, names: NAMES_ON, coords: COORDS_ON,
+             cityCount: cityCount(), labelsShown: lbPool.filter(function(e){ return e.style.display !== 'none'; }).length,
              relief: RELIEF_ON, reliefReady: !!reliefTex,
              drawn: drawn, ranges: rngN,
              lods: LAYERS.map(function(L){ return L.cache.map(function(c){ return c ? c.count : null; }); }),
@@ -972,6 +1321,10 @@ window.__globe = {
     if (o.detail !== undefined) setDetail(!!o.detail);
     if (o.borders !== undefined) setBorders(!!o.borders);
     if (o.relief !== undefined) setRelief(!!o.relief);
+    if (o.grid !== undefined) setGrid(!!o.grid);
+    if (o.cities !== undefined) setCities(!!o.cities);
+    if (o.names !== undefined) setNames(!!o.names);
+    if (o.coords !== undefined) setCoords(!!o.coords);
     if (o.slope !== undefined) RELIEF_SLOPE = o.slope;
     if (o.amt !== undefined) RELIEF_AMT = o.amt;
     anchor = null; updateCam(); requestRender();

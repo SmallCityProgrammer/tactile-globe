@@ -1,10 +1,11 @@
 # Tactile Globe
 
 A white globe with country borders in grey. No oceans, no labels.
-Scroll to zoom, drag to spin. Buttons add continental relief, take the internal
+Scroll to zoom, drag to spin. Buttons add continental relief, a graticule,
+city dots, place names and a live coordinate readout, take the internal
 borders away, or add the state and province borders of every country.
 
-A single 8.0 MB file with no external dependencies — it opens from `file://`,
+A single 7.9 MB file with no external dependencies — it opens from `file://`,
 by double-click, offline.
 
 ![The globe](docs/globo.png)
@@ -19,6 +20,10 @@ Open `globo.html`. That's it.
 |---|---|
 | scroll | zoom, anchored on the point under the cursor |
 | drag | spins the globe, the grabbed point stays under the cursor |
+| `grid` button (or `g`) | parallels and meridians every 15°, plus the tropics and polar circles |
+| `lon / lat` button (or `p`) | reads out the coordinates under the cursor |
+| `cities` button (or `c`) | city dots, more of them the closer you get |
+| `labels` button (or `l`) | country and city names |
 | `relief` button (or the `r` key) | shades the continents by elevation |
 | `land borders` button (or the `b` key) | hides the internal borders, keeping the coastline |
 | `states & provinces` button (or the `d` key) | toggles the subdivisions; brings the land borders back with them |
@@ -174,6 +179,40 @@ Because the filled region runs through the same sphere shader, it picks up the
 relief for free — the Alps and the Pyrenees read straight through the navy.
 
 ![Relief in the Alps](docs/relevo-alpes.png)
+
+### Places, and the names on them
+
+258 country label points and 7,342 cities, out of Natural Earth's
+`populated_places` — 18 MB of source, almost all of it names in dozens of
+languages. Only the point, the rank and one name survive: **125 KB**.
+
+Both sets are stored **in order of importance**, and that is what makes the
+zoom threshold free. Showing everything down to rank k is drawing the first
+`cum[k]` entries, so it stays one draw call with a smaller count and needs no
+per-instance test. 27 cities on the whole globe, 2,445 at 300 km.
+
+The names are **DOM over the canvas**, not a glyph atlas in WebGL. The browser
+already hints and kerns text; the hard part was never drawing the letters, it
+is choosing which names fit. Each frame the candidates are culled by the same
+exact horizon test the geometry uses, projected in double precision, sorted by
+rank, and placed greedily against the boxes already taken — first come, first
+served, capped at 90. Country names get a bias so a capital beats a small
+country and a small country beats a small town.
+
+### The graticule
+
+The only layer with no source at all: parallels and meridians every 15°,
+generated as chains and handed to the same pipeline as the borders, which
+gives it levels of detail and view culling for nothing. The tropics and the
+polar circles are a second layer, a shade darker.
+
+Two details it needed. A `minStep` per layer, because the sagitta
+densification the borders use would subdivide a grid line to 450,000 segments
+for a shape that is exact at 60,000. And parallels are cut into quadrants:
+simplification flattens a constant-latitude line to its two endpoints, and a
+chain spanning the full 360° then unwraps across the antimeridian to a span of
+zero — the whole circle collapsing to one degenerate segment. No quadrant can
+wrap.
 
 ---
 
@@ -365,6 +404,7 @@ Rendering is on demand — with no input, no frame is drawn.
 ```bash
 node tools/build.mjs     # fetches Natural Earth -> data/*.bin
 node tools/relief.mjs    # fetches elevation -> data/relief.png
+node tools/places.mjs    # countries + cities -> data/places.bin
 node tools/pack.mjs      # src/template.html + data -> globo.html
 ```
 
@@ -376,11 +416,13 @@ produce byte-identical output on every run.
 src/template.html        renderer (WebGL2 + controls), with the data placeholders
 tools/build.mjs          Natural Earth -> quantized binaries
 tools/relief.mjs         global elevation -> downsampled greyscale PNG
+tools/places.mjs         label points and cities -> name + rank + position
 tools/pack.mjs           packs everything into one HTML file
 data/coastlines.bin      coastlines (2.04 MB)
 data/land_borders.bin    country-to-country land borders (0.34 MB)
 data/subdivisions.bin    internal state/province borders (1.78 MB)
 data/relief.png          elevation, 5400x2700 greyscale (1.60 MB)
+data/places.bin          258 countries and 7,342 cities (0.12 MB)
 globo.html               the result
 ```
 

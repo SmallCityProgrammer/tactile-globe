@@ -65,6 +65,9 @@
     <option value="1">sepia</option>
     <option value="2">atlas</option>
     <option value="3">satellite</option>
+    <option value="4">bathymetric</option>
+    <option value="5">contour</option>
+    <option value="6">grey</option>
   </select>
   <button id="relief" type="button" aria-pressed="false">relief</button>
   <button id="borders" type="button" aria-pressed="true">land borders</button>
@@ -75,6 +78,7 @@
 <script id="geo5" type="application/octet-stream">__DATA5_B64__</script>
 <script id="places" type="application/octet-stream">__PLACES_B64__</script>
 <script id="satjpg" type="application/octet-stream">__SAT_B64__</script>
+<script id="bathpng" type="application/octet-stream">__BATH_B64__</script>
 <script id="reliefpng" type="application/octet-stream">__RELIEF_B64__</script>
 <script>
 (function(){
@@ -422,10 +426,10 @@ var SPH_FS = '#version 300 es\n' + [
 'in vec2 vNdc;',
 'uniform vec3 uRight, uUp, uFwd, uCamDir, uLight, uBgTop, uBgBot;',
 'uniform float uTanHF, uAspect, uC2, uR, uInvR, uHOverR;',
-'uniform sampler2D uRelief, uSat;',
+'uniform sampler2D uRelief, uSat, uBath;',
 'uniform vec2 uTexel, uTexSize;',
 'uniform float uReliefAmt, uSlope;',
-'uniform vec2 uSatSize, uSatTexel;',
+'uniform vec2 uSatSize, uSatTexel, uBathTexel;',
 'uniform float uSatAmt, uRecon, uStyle;',
 'out vec4 frag;',
 /* Catmull-Rom in nine bilinear taps. Under magnification the hardware's own
@@ -446,6 +450,16 @@ var SPH_FS = '#version 300 es\n' + [
 '  c = mix(c, vec3(0.788, 0.667, 0.470), smoothstep(0.26, 0.52, t));',
 '  c = mix(c, vec3(0.604, 0.451, 0.322), smoothstep(0.50, 0.76, t));',
 '  c = mix(c, vec3(0.910, 0.894, 0.878), smoothstep(0.74, 1.00, t));',
+'  return c;',
+'}',
+/* Depth ramp. Most of the sea floor sits between 3 and 5 km, so the input is
+   shaped the same way the land ramp is or the whole ocean lands on one tone. */
+'vec3 depthRamp(float d){',
+'  float t = pow(clamp(d, 0.0, 1.0), 0.70);',
+'  vec3 c = mix(vec3(0.812, 0.902, 0.941), vec3(0.620, 0.796, 0.878), smoothstep(0.00, 0.16, t));',
+'  c = mix(c, vec3(0.357, 0.604, 0.776), smoothstep(0.14, 0.38, t));',
+'  c = mix(c, vec3(0.173, 0.384, 0.627), smoothstep(0.36, 0.64, t));',
+'  c = mix(c, vec3(0.063, 0.169, 0.341), smoothstep(0.62, 1.00, t));',
 '  return c;',
 '}',
 'vec3 catrom(sampler2D t, vec2 uv, vec2 size){',
@@ -513,11 +527,24 @@ var SPH_FS = '#version 300 es\n' + [
 '    float hs = dot(nl, vec3(-0.5, 0.5, 0.7071068));',   // light from the north-west
 '    shade *= clamp(1.0 + uReliefAmt*(hs - 0.7071068), 0.35, 1.6);',
 '  }',
-'  float elev = 0.0;',
-'  if (uStyle > 0.5 && uStyle < 2.5){',
+'  float elev = 0.0, dpt = 0.0, seaShade = 1.0;',
+'  vec2 uvS = vec2(0.0);',
+'  bool derived = (uStyle > 0.5 && uStyle < 2.5) || uStyle > 3.5;',
+'  if (derived){',
 '    float laS = asin(clamp(n.y, -1.0, 1.0));',
 '    float loS = atan(-n.z, n.x);',
-'    elev = texture(uRelief, vec2(loS*0.1591549431 + 0.5, 0.5 - laS*0.3183098862)).r;',
+'    uvS = vec2(loS*0.1591549431 + 0.5, 0.5 - laS*0.3183098862);',
+'    elev = texture(uRelief, uvS).r;',
+'    dpt  = texture(uBath, uvS).r;',
+'  }',
+'  if (uStyle > 3.5 && uStyle < 4.5){',
+'    float bx = texture(uBath, uvS + vec2(uBathTexel.x, 0.0)).r',
+'             - texture(uBath, uvS - vec2(uBathTexel.x, 0.0)).r;',
+'    float by = texture(uBath, uvS + vec2(0.0, uBathTexel.y)).r',
+'             - texture(uBath, uvS - vec2(0.0, uBathTexel.y)).r;',
+'    float cl2 = max(cos(asin(clamp(n.y, -1.0, 1.0))), 0.03);',
+'    vec3 nb = normalize(vec3(bx*7.0/cl2, -by*7.0, 1.0));',
+'    seaShade = clamp(1.0 + 0.9*(dot(nb, vec3(-0.5, 0.5, 0.7071068)) - 0.7071068), 0.55, 1.35);',
 '  }',
 '  vec3 surface = vec3(shade);',
 '  if (uStyle > 0.5 && uStyle < 1.5){',
@@ -528,10 +555,35 @@ var SPH_FS = '#version 300 es\n' + [
 '    surface = paper*(0.42 + 0.58*pow(sh, 0.85));',
 '    surface *= 0.94 + 0.06*grain(gl_FragCoord.xy);',
 '  } else if (uStyle > 1.5 && uStyle < 2.5){',
-     /* hypsometric atlas: ramp on land, flat pale water */
+     /* hypsometric atlas, now with the sea carrying its own depth */
 '    float land = smoothstep(0.0, 0.010, elev);',
-'    vec3 c = mix(vec3(0.788, 0.859, 0.906), hypso(elev), land);',
+'    vec3 c = mix(depthRamp(dpt*0.85), hypso(elev), land);',
 '    surface = c*(0.55 + 0.45*shade);',
+'  } else if (uStyle > 3.5 && uStyle < 4.5){',
+     /* bathymetric chart: the sea is the subject, the land steps back */
+'    float land = smoothstep(0.0, 0.010, elev);',
+'    vec3 sea = depthRamp(dpt)*seaShade;',
+'    vec3 dry = vec3(0.867, 0.851, 0.816)*(0.80 + 0.20*shade);',
+'    surface = mix(sea, dry, land);',
+'  } else if (uStyle > 4.5 && uStyle < 5.5){',
+     /* contour: isolines straight off the elevation field. Screen-space
+        derivatives keep the line one pixel wide at every zoom. */
+'    float land = smoothstep(0.0, 0.010, elev);',
+'    float lev = pow(clamp(elev, 0.0, 1.0), 0.55)*22.0;',
+'    float fw = max(fwidth(lev), 1e-5);',
+'    float dist = min(fract(lev), 1.0 - fract(lev))/fw;',
+'    float line = (1.0 - smoothstep(0.0, 1.1, dist))*land;',
+'    float major = (1.0 - smoothstep(0.0, 1.1, min(fract(lev*0.25), 1.0 - fract(lev*0.25))/max(fwidth(lev*0.25), 1e-5)))*land;',
+'    vec3 base = mix(vec3(0.878, 0.914, 0.929), vec3(0.965, 0.949, 0.910), land);',
+'    base = mix(base, vec3(0.639, 0.514, 0.373), line*0.55);',
+'    base = mix(base, vec3(0.451, 0.333, 0.216), major*0.75);',
+'    surface = base*(0.88 + 0.12*shade);',
+'  } else if (uStyle > 5.5){',
+     /* grey earth: the relief alone, no hue at all */
+'    float land = smoothstep(0.0, 0.010, elev);',
+'    float g = mix(0.945, 0.875, land);',
+'    float sh = clamp((shade - 0.55)/0.45, 0.0, 1.0);',
+'    surface = vec3(g*(0.46 + 0.54*pow(sh, 0.9)));',
 '  }',
 '  if (uSatAmt > 0.0){',
 '    float la2 = asin(clamp(n.y, -1.0, 1.0));',
@@ -713,6 +765,26 @@ var cityVao = null;
 })();
 
 /* Blue Marble, same 5400x2700 grid as the elevation raster */
+var bathTex = null, BATH_W = 0, BATH_H = 0;
+(function(){
+  var im = new Image();
+  im.onload = function(){
+    BATH_W = im.width; BATH_H = im.height;
+    bathTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, bathTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, im);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    requestRender();
+  };
+  im.src = 'data:image/png;base64,' + document.getElementById('bathpng').textContent;
+})();
+
 var satTex = null, SAT_W = 0, SAT_H = 0;
 (function(){
   var im = new Image();
@@ -1246,7 +1318,7 @@ function draw(){
      blur pretending to be terrain, while the vector lines stay sharp. */
   /* the derived styles are functions of elevation, so they need the raster
      whether or not the relief toggle is on */
-  var styleNeedsRelief = (STYLE === 1 || STYLE === 2);
+  var styleNeedsRelief = (STYLE === 1 || STYLE === 2 || STYLE >= 4);
   var ramt = 0;
   if ((RELIEF_ON || styleNeedsRelief) && reliefTex){
     var t = (h*FOV/vpH)/(2*Math.PI/RELIEF_W);      // texels per screen pixel
@@ -1275,12 +1347,18 @@ function draw(){
   }
   gl.uniform1f(uSph.uSatAmt, samt);
   gl.uniform1f(uSph.uStyle, STYLE);
-  if (ramt > 0 || STYLE === 1 || STYLE === 2){
+  if (ramt > 0 || STYLE === 1 || STYLE === 2 || STYLE >= 4){
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, reliefTex);
     gl.uniform1i(uSph.uRelief, 0);
     gl.uniform2f(uSph.uTexel, 1/RELIEF_W, 1/RELIEF_H);
     gl.uniform2f(uSph.uTexSize, RELIEF_W, RELIEF_H);
+    if (bathTex){
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, bathTex);
+      gl.uniform1i(uSph.uBath, 2);
+      gl.uniform2f(uSph.uBathTexel, 1/BATH_W, 1/BATH_H);
+    }
   }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -1455,7 +1533,7 @@ window.addEventListener('keydown', function(e){
   else if (e.key === 'c' || e.key === 'C'){ setCities(!CITIES_ON); }
   else if (e.key === 'l' || e.key === 'L'){ setNames(!NAMES_ON); }
   else if (e.key === 'p' || e.key === 'P'){ setCoords(!COORDS_ON); }
-  else if (e.key === 's' || e.key === 'S'){ setStyle((STYLE + 1) % 4); }
+  else if (e.key === 's' || e.key === 'S'){ setStyle((STYLE + 1) % 7); }
 });
 
 window.__globe = {
@@ -1464,7 +1542,7 @@ window.__globe = {
     return { lon: lon, lat: lat, h: h, altKm: h*6371,
              detail: LAYERS[1].on, borders: LAYERS[2].on,
              grid: GRID_ON, cities: CITIES_ON, names: NAMES_ON, coords: COORDS_ON,
-             style: STYLE, satReady: !!satTex, recon: SAT_RECON,
+             style: STYLE, satReady: !!satTex, bathReady: !!bathTex, recon: SAT_RECON,
              cityCount: cityCount(), labelsShown: lbPool.filter(function(e){ return e.style.display !== 'none'; }).length,
              relief: RELIEF_ON, reliefReady: !!reliefTex,
              drawn: drawn, ranges: rngN,

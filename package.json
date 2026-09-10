@@ -1,7 +1,7 @@
 {
   "name": "tactile-globe",
   "version": "1.0.0",
-  "description": "A globe of country borders in four styles: plain, sepia, atlas and satellite, as a single offline HTML file",
+  "description": "A globe of country borders in seven styles, as a single offline HTML file",
   "private": true,
   "type": "module",
   "scripts": {

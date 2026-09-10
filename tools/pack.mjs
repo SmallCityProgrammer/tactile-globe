@@ -22,7 +22,8 @@ const BINS = [
   ['__DATA5_B64__', path.join(ROOT, 'data', 'land_borders.bin')],
   ['__RELIEF_B64__', path.join(ROOT, 'data', 'relief.png')],
   ['__PLACES_B64__', path.join(ROOT, 'data', 'places.bin')],
-  ['__SAT_B64__', path.join(ROOT, 'data', 'satellite.jpg')]
+  ['__SAT_B64__', path.join(ROOT, 'data', 'satellite.jpg')],
+  ['__BATH_B64__', path.join(ROOT, 'data', 'bathymetry.png')]
 ];
 const OUT = path.join(ROOT, 'globo.html');
 

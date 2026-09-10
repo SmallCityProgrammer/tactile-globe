@@ -2,6 +2,7 @@
 data/*.geojson
 # raw elevation source (18 MB, fetched by tools/relief.mjs)
 data/elev_source.png
+data/bath_source.png
 # resolution experiments, not used by the build
 data/satellite_*.jpg
 

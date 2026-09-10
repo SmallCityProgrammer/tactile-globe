@@ -1,5 +1,5 @@
 /*
- * relief.mjs — global elevation  ->  data/relief.png
+ * relief.mjs — global elevation and bathymetry  ->  data/*.png
  *
  * Source: NASA Visible Earth's GEBCO-derived elevation raster, 21600x10800
  * 8-bit greyscale, equirectangular. Its encoding is convenient: 0 is sea
@@ -15,6 +15,12 @@
  * with no JavaScript decoder and no extra dependency here: zlib ships with
  * Node, and the rest is a few hundred lines of chunk plumbing.
  *
+ * The sea comes from the companion raster in the same family, and needs one
+ * adjustment: it is stored shallow-high (255 is land and the shoreline, 0 is
+ * the Mariana Trench), so it is inverted into a depth. Land then sits at a
+ * constant 0 and compresses away exactly as the ocean does in the elevation
+ * file — the two rasters are each other's negative space.
+ *
  * usage:  node tools/relief.mjs
  */
 import fs from 'fs';
@@ -27,16 +33,28 @@ const DATA = path.join(ROOT, 'data');
 const SRC_URL = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73934/gebco_08_rev_elev_21600x10800.png';
 const SRC = path.join(DATA, 'elev_source.png');
 const OUT = path.join(DATA, 'relief.png');
+const BATH_URL = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73963/gebco_08_rev_bath_21600x10800.png';
+const BATH_SRC = path.join(DATA, 'bath_source.png');
+const BATH_OUT = path.join(DATA, 'bathymetry.png');
 const FACTOR = 4;                     // 21600x10800 -> 5400x2700
+/* The sea floor is smooth and low-frequency: it carries no detail worth
+   land resolution, and at 5400 it costs 4 MB against relief.png 1.6 MB
+   because the ocean is noisy everywhere while land is only a third of the
+   elevation raster. Half the linear resolution, a quarter of the bytes. */
+const BATH_FACTOR = 8;                // 21600x10800 -> 2700x1350
 
 fs.mkdirSync(DATA, { recursive: true });
 
-if (!fs.existsSync(SRC)) {
-  console.log('downloading global elevation (~18 MB)...');
-  const res = await fetch(SRC_URL);
-  if (!res.ok) throw new Error('download failed: HTTP ' + res.status);
-  fs.writeFileSync(SRC, Buffer.from(await res.arrayBuffer()));
+async function source(url, file, mb) {
+  if (!fs.existsSync(file)) {
+    console.log(`downloading ${path.basename(file)} (~${mb} MB)...`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('download failed: HTTP ' + res.status);
+    fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  }
+  return file;
 }
+await source(SRC_URL, SRC, 18);
 
 /* ---------- minimal PNG reader: 8-bit greyscale, non-interlaced ---------- */
 function readPNG(file) {
@@ -44,14 +62,23 @@ function readPNG(file) {
   const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   if (!b.subarray(0, 8).equals(sig)) throw new Error('not a PNG');
 
-  let p = 8, W = 0, H = 0;
+  let p = 8, W = 0, H = 0, colour = 0;
   const idat = [];
   while (p < b.length) {
     const len = b.readUInt32BE(p), type = b.subarray(p + 4, p + 8).toString('ascii');
     if (type === 'IHDR') {
       W = b.readUInt32BE(p + 8); H = b.readUInt32BE(p + 12);
-      if (b[p + 16] !== 8 || b[p + 17] !== 0 || b[p + 20] !== 0)
-        throw new Error('expected 8-bit greyscale, non-interlaced');
+      colour = b[p + 17];
+      if (b[p + 16] !== 8 || (colour !== 0 && colour !== 3) || b[p + 20] !== 0)
+        throw new Error('expected 8-bit greyscale or palette, non-interlaced');
+    } else if (type === 'PLTE') {
+      /* a palette is fine as long as it is the identity grey ramp, which is
+         how these rasters ship; anything else would need real mapping */
+      for (let i = 0; i * 3 + 2 < len; i++) {
+        const r = b[p + 8 + 3 * i];
+        if (r !== b[p + 9 + 3 * i] || r !== b[p + 10 + 3 * i] || r !== i)
+          throw new Error('palette is not the identity grey ramp');
+      }
     } else if (type === 'IDAT') idat.push(b.subarray(p + 8, p + 8 + len));
     p += 12 + len;
     if (type === 'IEND') break;
@@ -148,35 +175,48 @@ function writePNG(w, h, px) {
 }
 
 /* ---------- run ---------- */
-console.log('decoding source...');
-const { W, H, img } = readPNG(SRC);
-
-const w = W / FACTOR, h = H / FACTOR;
-if (!Number.isInteger(w) || !Number.isInteger(h)) throw new Error('FACTOR must divide the source');
-
-console.log(`downsampling ${W}x${H} -> ${w}x${h}...`);
-const out = Buffer.allocUnsafe(w * h);
-const n2 = FACTOR * FACTOR;
-for (let y = 0; y < h; y++) {
-  for (let x = 0; x < w; x++) {
-    let s = 0;
-    for (let j = 0; j < FACTOR; j++) {
-      const row = (y * FACTOR + j) * W;
-      for (let i = 0; i < FACTOR; i++) s += img[row + x * FACTOR + i];
+function reduce(src, W, H, invert, factor) {
+  const FACTOR = factor;
+  const w = W / FACTOR, h = H / FACTOR;
+  if (!Number.isInteger(w) || !Number.isInteger(h)) throw new Error('FACTOR must divide the source');
+  const out = Buffer.allocUnsafe(w * h);
+  const n2 = FACTOR * FACTOR;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let j = 0; j < FACTOR; j++) {
+        const row = (y * FACTOR + j) * W;
+        for (let i = 0; i < FACTOR; i++) {
+          const v = src[row + x * FACTOR + i];
+          acc += invert ? 255 - v : v;
+        }
+      }
+      out[y * w + x] = Math.round(acc / n2);
     }
-    out[y * w + x] = Math.round(s / n2);
   }
+  return { w, h, out };
 }
 
-const png = writePNG(w, h, out);
-fs.writeFileSync(OUT, png);
+function emit(label, file, src, W, H, invert, aboveLabel, factor) {
+  const { w, h, out } = reduce(src, W, H, invert, factor);
+  const png = writePNG(w, h, out);
+  fs.writeFileSync(file, png);
+  let nz = 0;
+  for (let i = 0; i < out.length; i++) if (out[i] > 0) nz++;
+  console.log([
+    ``,
+    `${label}`,
+    `  size                ${w}x${h}   (~${(40075 / w).toFixed(1)} km/pixel at the equator)`,
+    `  ${aboveLabel.padEnd(18)}${(100 * nz / out.length).toFixed(1)}%`,
+    `  ${path.relative(ROOT, file).padEnd(18)}${(png.length / 1048576).toFixed(2)} MB`
+  ].join('\n'));
+}
 
-let land = 0;
-for (let i = 0; i < out.length; i++) if (out[i] > 0) land++;
-console.log([
-  ``,
-  `relief`,
-  `  size                ${w}x${h}   (~${(40075 / w).toFixed(1)} km/pixel at the equator)`,
-  `  above sea level     ${(100 * land / out.length).toFixed(1)}%`,
-  `  data/relief.png     ${(png.length / 1048576).toFixed(2)} MB`
-].join('\n'));
+console.log('decoding elevation...');
+const e = readPNG(SRC);
+emit('relief', OUT, e.img, e.W, e.H, false, 'above sea level', FACTOR);
+
+console.log('decoding bathymetry...');
+const bs = await source(BATH_URL, BATH_SRC, 34);
+const d = readPNG(bs);
+emit('bathymetry', BATH_OUT, d.img, d.W, d.H, true, 'below sea level', BATH_FACTOR);

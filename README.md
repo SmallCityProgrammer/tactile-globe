@@ -1,11 +1,11 @@
 # Tactile Globe
 
-A globe of country borders that can dress as four different maps. Scroll to
+A globe of country borders that can dress as seven different maps. Scroll to
 zoom, drag to spin. A style selector swaps the whole surface; buttons add a
 graticule, city dots, place names and a live coordinate readout, take the
 internal borders away, or add the state and province borders of every country.
 
-A single 11.2 MB file with no external dependencies — it opens from `file://`,
+A single 12.8 MB file with no external dependencies — it opens from `file://`,
 by double-click, offline.
 
 ![The globe](docs/globo.png)
@@ -20,7 +20,7 @@ Open `globo.html`. That's it.
 |---|---|
 | scroll | zoom, anchored on the point under the cursor |
 | drag | spins the globe, the grabbed point stays under the cursor |
-| `style` selector (or `s` to cycle) | plain, sepia, atlas or satellite |
+| `style` selector (or `s` to cycle) | plain, sepia, atlas, satellite, bathymetric, contour or grey |
 | `grid` button (or `g`) | parallels and meridians every 15°, plus the tropics and polar circles |
 | `lon / lat` button (or `p`) | reads out the coordinates under the cursor |
 | `cities` button (or `c`) | city dots, more of them the closer you get |
@@ -202,11 +202,11 @@ country and a small country beats a small town.
 
 ### Styles
 
-Four surfaces, and three of them cost nothing to ship. Sepia and atlas are
-**functions of the elevation raster that was already in the file** — a colour
-ramp and a hillshade, evaluated in the sphere's fragment shader. No new
-download, no new bytes, and no measurable frame time: every style lands in the
-same 0.1–0.44 ms band as the plain globe.
+Seven surfaces, and five of them cost nothing to ship. They are **functions of
+the elevation raster that was already in the file** — a colour ramp and a
+hillshade, evaluated in the sphere's fragment shader. No new download, no new
+bytes, and no measurable frame time: every style lands in the same 0.26–0.48 ms
+band as the plain globe.
 
 - **plain** — the white cartographic globe the project started as.
 - **sepia** — tan paper, the relief doing all the work. The grain is applied in
@@ -215,12 +215,36 @@ same 0.1–0.44 ms band as the plain globe.
 - **atlas** — the hypsometric ramp of a physical atlas. Land elevation is
   heavily skewed low, so the input is shaped (`pow(e, 0.42)`) before the ramp,
   or every continent lands on the first colour.
-- **satellite** — NASA Blue Marble, 5400x2700, the one style that needs its own
-  raster (2.45 MB).
+- **satellite** — NASA Blue Marble, 5400x2700 (2.45 MB).
+- **bathymetric** — the sea as the subject: a depth ramp with the sea floor
+  hillshaded, land stepping back to a flat neutral. The Mid-Atlantic Ridge and
+  its fracture zones read straight off it.
+- **contour** — isolines taken directly off the elevation field, 22 levels with
+  every fourth one heavier. Screen-space derivatives keep the line one pixel
+  wide at every zoom, so it thins rather than fattens as you go in.
+- **grey** — Natural Earth's *Gray Earth* idea: the relief alone, no hue at all.
 
 Because the ramp reads elevation, the atlas style colours Ireland and the
 Amazon the same: distinguishing forest from grassland needs land cover, which
 is a different dataset.
+
+**The sea needed its own raster.** The elevation source encodes everything below
+sea level as zero, so until now the ocean was flat in every derived style. Its
+companion in the same GEBCO family carries the depth, stored shallow-high — 255
+is land and the shoreline, 0 is the Mariana Trench — so it is inverted into a
+depth on the way in. Land then sits at a constant 0 and compresses away exactly
+as the ocean does in the elevation file: **the two rasters are each other's
+negative space**.
+
+It also ships at half the linear resolution, 2700x1350. The sea floor is smooth
+and low-frequency, and at land resolution it cost 4.00 MB against relief.png's
+1.60 — the ocean is noisy everywhere while land is only a third of the elevation
+raster. Half the resolution, a quarter of the bytes: **1.18 MB**.
+
+One wrinkle worth recording: that raster ships as an 8-bit *palette* PNG, not
+greyscale, so the bytes are indices. The palette turned out to be the identity
+grey ramp, so the reader accepts it after checking exactly that — anything else
+would need real mapping rather than a silent reinterpretation.
 
 ### Reconstruction, and what it can and cannot fix
 
@@ -458,7 +482,7 @@ produce byte-identical output on every run.
 ```
 src/template.html        renderer (WebGL2 + controls), with the data placeholders
 tools/build.mjs          Natural Earth -> quantized binaries
-tools/relief.mjs         global elevation -> downsampled greyscale PNG
+tools/relief.mjs         elevation and bathymetry -> downsampled greyscale PNGs
 tools/places.mjs         label points and cities -> name + rank + position
 tools/satellite.mjs      Blue Marble, downloaded and embedded as published
 tools/pack.mjs           packs everything into one HTML file
@@ -466,6 +490,7 @@ data/coastlines.bin      coastlines (2.04 MB)
 data/land_borders.bin    country-to-country land borders (0.34 MB)
 data/subdivisions.bin    internal state/province borders (1.78 MB)
 data/relief.png          elevation, 5400x2700 greyscale (1.60 MB)
+data/bathymetry.png      sea depth, 2700x1350 greyscale (1.18 MB)
 data/places.bin          258 countries and 7,342 cities (0.12 MB)
 data/satellite.jpg       Blue Marble, 5400x2700 (2.45 MB)
 globo.html               the result

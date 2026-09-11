@@ -1,0 +1,162 @@
+=========== agent-ad1a604f27ba2be08.jsonl
+[F01] (high, 0.95) src/template.html line 201, ROADS San'indō waypoint [35.1, 135.2, 'Fukuchiyama']
+  CLAIM: The point is at Tanba-Sasayama, ~23 km south of Fukuchiyama (castle 35.297, 135.130); the San'indō ran Kameoka–Sonobe–Fukuchiyama, not via Sasayama.
+  FIX: [35.297, 135.13, 'Fukuchiyama']
+
+[F02] (high, 0.95) src/template.html line 195, ROADS Yonezawa-kaidō waypoint [38.73, 140.0, 'Shinjō']
+  CLAIM: Shinjō is at 38.765, 140.302; the point is ~26 km west of it in the Tozawa/Furukuchi hills.
+  FIX: [38.765, 140.302, 'Shinjō']
+
+[F03] (high, 0.9) src/template.html line 199, ROADS Tosa-kaidō waypoint [33.9, 133.8, 'Ōtoyo']
+  CLAIM: Ōtoyo is at 33.769, 133.643; the point is ~20 km NE, inside Miyoshi (Tokushima). The Tosa–Awa road went Ōtoyo → Awa-Ikeda → down the Yoshino valley.
+  FIX: replace with two waypoints: [33.769, 133.643, 'Ōtoyo'], [34.026, 133.807, 'Ikeda']
+
+[F04] (high, 0.9) src/template.html line 196, ROADS Nagasaki-kaidō waypoint [33.1, 130.1, 'Takeo']
+  CLAIM: The point is at Kashima on the Ariake coast (Tara road), ~12 km SE of Takeo (33.195, 130.021), which is the actual Nagasaki-kaidō post town.
+  FIX: [33.195, 130.021, 'Takeo'] (optionally add [32.9, 129.96, 'Ōmura'] so the line does not cut across Ōmura Bay)
+
+[F05] (medium, 0.9) src/template.html line 197, ROADS Satsuma-kaidō waypoint [32.05, 130.45, 'Izumi']
+  CLAIM: Izumi is at 32.090, 130.353; the point is ~10 km ESE in the hills.
+  FIX: [32.09, 130.353, 'Izumi']
+
+[F06] (medium, 0.85) src/template.html line 190, ROADS San'yōdō waypoint [34.49, 133.36, 'Fukuyama']
+  CLAIM: Fukuyama did not exist until 1619 and the San'yōdō never passed its site; the c.1580 station/castle on the road was Kannabe (Mōri-held, 34.538, 133.384), ~6 km north.
+  FIX: [34.538, 133.384, 'Kannabe']
+
+[F07] (low, 0.75) src/template.html line 190, ROADS San'yōdō waypoint [34.69, 133.75, 'Itakura']
+  CLAIM: Itakura-juku is at Kibitsu (Okayama Kita-ku), ~850 m west of the Magane ichirizuka (34.677, 133.850); the point is ~8 km too far west.
+  FIX: [34.677, 133.841, 'Itakura']
+
+[F08] (low, 0.6) src/template.html line 190, ROADS San'yōdō waypoint [34.75, 134.4, 'Ako']
+  CLAIM: The San'yōdō did not descend to Akō on the coast; it crossed the Chikusa river at Une (Akō city, 34.807, 134.372), ~7 km north.
+  FIX: [34.807, 134.372, 'Une']
+
+[F09] (medium, 0.8) src/template.html line 191, ROADS Hokurikudō waypoint [36.005, 136.297, 'Ichijōdani']
+  CLAIM: The Hokurikudō ran Tsuruga → Fuchū (Takefu) → Kitanoshō (Shibata Katsuie's seat from 1575, the Oda capital of Echizen) → Maruoka; Ichijōdani is a burned-out (1573) side valley ~10 km off the road.
+  FIX: replace the Ichijōdani waypoint with [35.903, 136.169, 'Fuchū'], [36.065, 136.221, 'Kitanoshō'] (Kitanoshō is also a notable omission from PLACES: { n: 'Kitanoshō', ja: '北ノ庄', t: 'castle', r: 2, ll: [36.065, 136.221], clan: 'oda', size: 1 })
+
+[F10] (medium, 0.85) src/template.html line 180, PLACES { n: 'Tokushima', ja: '徳島', t: 'castle', clan: 'chosokabe' } and the 'Tokushima' waypoints in ROADS lines 199-200
+  CLAIM: Tokushima castle was built by Hachisuka Iemasa from 1585; in 1580 the political centre of Awa was Shōzui (Miyoshi/Sogō Masayasu), which fell to the Chōsokabe only in 1582 (Nakatomigawa). A Chōsokabe 'Tokushima castle' is doubly anachronistic.
+  FIX: { n: 'Shōzui', ja: '勝瑞', t: 'castle', r: 3, ll: [34.133, 134.523], size: 1 } (no clan; the Miyoshi are not in CLANS) and change both road nodes to [34.133, 134.523, 'Shōzui']
+
+[F11] (medium, 0.85) src/template.html line 181, PLACES { n: 'Matsuyama (Yuzuki)', clan: 'chosokabe' }
+  CLAIM: Yuzuki was the seat of Kōno Michinao (under Mōri protection) until it surrendered to Kobayakawa Takakage in 1585; the Chōsokabe never held it.
+  FIX: remove clan (or clan: 'kono' if F12's Kōno entry is added); coordinates can be tightened to [33.848, 132.787]
+
+[F12] (medium, 0.75) src/template.html line 115, CLANS.chosokabe.prefs includes 'Ehime'
+  CLAIM: Iyo was not Chōsokabe territory at any point in 1578-82; the Kōno (Yuzuki), Saionji and Utsunomiya of Ōzu held it with Mōri backing, and Chōsokabe raids into Iyo only began in earnest 1582-85.
+  FIX: remove 'Ehime' from chosokabe.prefs (leave unassigned like Miyagi/Akita), or add kono: { name: 'Kōno', ja: '河野', capital: [33.848, 132.787], labelAt: [33.7, 132.9], prefs: ['Ehime'] }
+
+[F13] (medium, 0.75) src/template.html line 114 CLANS.mori.prefs 'Okayama' and line 150 PLACES { n: 'Okayama', clan: 'mori' }
+  CLAIM: Ukita Naoie (Okayama/Ishiyama castle) defected from the Mōri to Nobunaga in Sept-Oct 1579; from then Bizen and most of Mimasaka (the eastern two-thirds of the prefecture) were Ukita/Oda, and only Bitchū (Takamatsu, until June 1582) stayed Mōri. Mōri for Okayama and for Okayama castle is the pre-1579 situation.
+  FIX: add ukita: { name: 'Ukita', ja: '宇喜多', color: <new>, capital: [34.665, 133.936], labelAt: [34.9, 133.9], prefs: ['Okayama'] }, remove 'Okayama' from mori.prefs, and set the Okayama PLACES entry to clan: 'ukita' (simpler alternative: move 'Okayama' to oda.prefs and clan: 'oda')
+
+[F14] (medium, 0.65) src/template.html line 108, CLANS.hojo.prefs includes 'Gunma'
+  CLAIM: After Kitajō Takahiro brought Umayabashi (Maebashi) over to the Takeda in 1579 and Sanada Masayuki took Numata in 1580, all of Kōzuke except the south-east (Yura at Kanayama, Nagao at Tatebayashi) was Takeda until March 1582 — Minowa, Umayabashi, Numata, Iwabitsu. Hōjō control of Gunma is the post-June-1582 picture.
+  FIX: move 'Gunma' from hojo.prefs to takeda.prefs (takeda.prefs: ['Yamanashi', 'Nagano', 'Gunma'])
+
+[F15] (medium, 0.6) src/template.html line 111, CLANS.date { capital: [37.91, 140.117], prefs: ['Fukushima'] }
+  CLAIM: c.1580 Date Terumune held only the Date and Shinobu districts (the Fukushima-city strip) plus Okitama (Yonezawa) — and Yonezawa lies in Yamagata prefecture, so the Date capital is drawn inside Mogami-coloured ground. The dominant power in Fukushima prefecture in 1580 was the Ashina of Aizu (Kurokawa castle); the Date took Aizu only in 1589.
+  FIX: either document 'Date = Fukushima' as a deliberate 1589 anticipation, or add ashina: { name: 'Ashina', ja: '蘆名', color: <new>, capital: [37.488, 139.93], labelAt: [37.4, 139.8], prefs: ['Fukushima'] } and set date.prefs: [] (Date then appears only as Yonezawa castle)
+
+[F16] (low, 0.55) src/template.html line 110, CLANS.uesugi.prefs includes 'Toyama'
+  CLAIM: From 1578 the Oda-backed Jinbō Nagazumi held Toyama castle and Saitō Toshiharu/Sassa Narimasa cleared western and central Etchū; Sassa was granted Etchū in 1581 and sat in Toyama castle from early 1581. The Uesugi kept only Uozu/Matsukura in the east until June 1582. Uesugi for Toyama is the 1577-78 situation.
+  FIX: move 'Toyama' from uesugi.prefs to oda.prefs (or keep Uesugi and note the caveat)
+
+[F17] (high, 0.85) src/template.html line 175, PLACES { n: 'Utsunomiya', clan: 'hojo' }
+  CLAIM: In 1580 Utsunomiya castle was the seat of Utsunomiya Kunitsuna, an anti-Hōjō ally of the Satake and Yūki; the Hōjō never garrisoned it before 1590 (Kunitsuna only withdrew to Tage castle in 1585 under Hōjō pressure).
+  FIX: remove clan: 'hojo' (or clan: 'satake' if the alliance colour is wanted)
+
+[F18] (low, 0.45) src/template.html line 108, CLANS.hojo.prefs includes 'Tochigi'
+  CLAIM: In 1578-82 the Hōjō held only southern Shimotsuke (Oyama's Gion castle 1576-82, Mibu, Minagawa, Ashikaga-Nagao); Utsunomiya, Nasu and Sano — the larger northern and central part of the prefecture — were independent or hostile to the Hōjō. Hōjō Tochigi is the 1585-90 picture.
+  FIX: remove 'Tochigi' from hojo.prefs and leave it unassigned (as Miyagi/Akita/Wakayama/Kumamoto are)
+
+[F19] (low, 0.6) src/template.html line 139, PLACES { n: 'Sunpu', ja: '駿府', t: 'castle', clan: 'takeda' }
+  CLAIM: No Sunpu castle existed in 1580 (Ieyasu built it in 1585); the Takeda ruled Suruga from Ejiri castle (Anayama Nobukimi). The town of Sunpu did exist.
+  FIX: either t: 'city' (keep clan: 'takeda'), or replace with { n: 'Ejiri', ja: '江尻', t: 'castle', r: 2, ll: [35.022, 138.479], clan: 'takeda', size: 1 }
+
+[F20] (low, 0.6) src/template.html line 157, PLACES { n: 'Hirado', nanban: true }
+  CLAIM: Portuguese ships abandoned Hirado after the 1561 Miyanomae incident (Yokoseura 1562, Fukuda 1565, Nagasaki from 1571); in 1580 Hirado had Chinese trade but no nanban ships (the Dutch/English only arrive in 1609/1613).
+  FIX: remove nanban: true from Hirado (keep t: 'port'); Nagasaki is the only nanban port in 1580 (Kuchinotsu on Shimabara and Funai/Usuki were secondary)
+
+[F21] (low, 0.7) src/template.html line 179, PLACES { n: 'Shimonoseki', ja: '下関' } and the San'yōdō node [33.96, 130.94, 'Shimonoseki'] on line 190
+  CLAIM: The port was called Akamagaseki (赤間関) throughout the Sengoku and Edo periods; 'Shimonoseki' as the town name is modern (1889/1902).
+  FIX: n: 'Akamagaseki', ja: '赤間関' (same coordinates); road node label 'Akamagaseki'
+
+[F22] (low, 0.6) src/template.html lines 159, 156, 164, 153 (PLACES Kagoshima, Saga, Kanazawa, Funai) and CLANS.shimazu.capital line 118
+  CLAIM: Four castle entries carry post-1580 castle names: the Shimazu seat 1550-95 was Uchi castle (内城, 31.606, 130.563), Kagoshima/Tsurumaru castle dates from 1601; the Ryūzōji seat was Muranaka castle (村中城, same site; 'Saga castle' is Nabeshima, 1602-11); 'Kanazawa castle' is Maeda (1583) — in 1580 it was the Kanazawa Gobō just taken by Sakuma Morimasa and refortified as Oyama castle (尾山城); Funai had no castle (built 1597) — the Ōtomo lived in the Funai yakata in the town.
+  FIX: following the file's own 'Matsuyama (Yuzuki)' convention: Kagoshima → n: 'Kagoshima (Uchi)', ja: '内城', ll: [31.606, 130.563] (and shimazu.capital [31.606, 130.563]); Saga → n: 'Saga (Muranaka)', ja: '村中'; Kanazawa → n: 'Kanazawa (Oyama)', ja: '尾山'; Funai → t: 'city' (keep clan: 'otomo')
+
+[F23] (low, 0.6) src/template.html line 169, PLACES { n: 'Hieizan', t: 'temple' }
+  CLAIM: Enryakuji was burned by Nobunaga in 1571 and rebuilding was only permitted from 1584; in 1580 it was a ruin.
+  FIX: add ruin: true (as for Ichijōdani/Odani), if the ruin flag is honoured for temples
+
+[F24] (low, 0.5) src/template.html line 142, PLACES { n: 'Sekigahara', t: 'battle', a: 'tokugawa', b: 'mori', year: 1600 }
+  CLAIM: Sekigahara is the only battle in the table that postdates the c.1580 map (by 20 years); 'b: mori' is defensible only in the sense that Mōri Terumoto was the absent nominal commander — the field army was Ishida Mitsunari's.
+  FIX: drop the entry from a c.1580 map, or keep it consciously as a landmark and change b to 'ishida' (with a colour fallback, as for 'imagawa'/'azai')
+
+[F25] (low, 0.7) src/template.html line 193, ROADS { n: 'Kōshū Kaidō', ja: '甲州道' }
+  CLAIM: Romaji and kanji disagree: 'Kaidō' is 街道, but the ja field is 甲州道 (Kōshū-dō).
+  FIX: either ja: '甲州街道' or n: 'Kōshū-dō' (the other entries use 'X-kaidō' with 街道)
+
+[F26] (low, 0.55) src/template.html line 198, ROADS { n: 'Bungo-kaidō', ja: '豊後街道' }
+  CLAIM: 豊後街道 is the name of the Kumamoto–Aso–Ōita road; the route drawn (Hakata–Kokura–Nakatsu–Funai along the Buzen coast) is the Kokura/Nakatsu road (中津街道) continuing down the Bungo coast.
+  FIX: rename to n: 'Nakatsu-kaidō', ja: '中津街道' (or reroute Bungo-kaidō as Kumamoto [32.806,130.706] → Ōzu [32.87,130.87] → Aso [32.95,131.05] → Funai)
+
+[F27] (low, 0.6) src/template.html ROADS waypoint labels: 'Sendai' (line 192), 'Morioka' (192), 'Takaoka' (191), 'Matsusaka' (194), 'Hiroshima' (190), 'Tokuyama' (190), 'Takamatsu' (200), 'Marugame' (200), 'Fukushima' (192)
+  CLAIM: These post-town labels (rendered as 'X-shuku') are Edo-period town names that did not exist in 1580: Sendai (1600; the site was Chiyo 千代 castle of the Kokubun), Morioka (1597; Kozukata 不来方), Takaoka (1609), Matsusaka (1588; Oda Nobukatsu's seat was Matsugashima 松ヶ島, 34.605, 136.532), Hiroshima (1589), Tokuyama (1650), Takamatsu (1588), Marugame (1597), Fukushima in Mutsu (1592; Suginome 杉目). Routes themselves are fine.
+  FIX: rename labels, keeping coordinates unless noted: 'Chiyo' [38.253, 140.856]; 'Kozukata'; 'Sekino' (Takaoka); 'Matsugashima' [34.605, 136.532]; 'Gokamura' (Hiroshima); 'Tonda' (Tokuyama); 'Nohara' (Takamatsu); 'Utazu' [34.31, 133.82] (Marugame); 'Suginome' (Fukushima)
+
+[F28] (low, 0.65) src/template.html line 209, SHIPS entries [34.05, 134.35, 1] and [33.85, 130.95, 1]
+  CLAIM: Ships are drawn without a sea test: [34.05, 134.35] is in the Yoshino valley near Awa/Yoshinogawa, ~20 km inland from the Tokushima coast; [33.85, 130.95] is Sone in Kokura-Minami ward, ~3 km inland from the Suō-nada shore.
+  FIX: [34.0, 134.75, 1] (Kii Channel off Tokushima) and [33.88, 131.05, 1] (Suō-nada off Moji); also assert seaKm(toXY(lat, lon)) > 0 for every SHIPS entry at build time
+
+=========== agent-a1e3d1ee3623bbbac.jsonl
+[F1] (high, 0.85) src/template.html line 641 `const N = 160, sp = T / N;` … line 666 `}, 200);` (MICRO cache limit), line 923-924 `tiles.push(micro(i, j))`, cellForest line 541-545
+  CLAIM: Micro-tile generation is far too expensive for the number of tiles the view demands in the 18-30 m/px band, and the MICRO cache (200) is smaller than the tiles in view, so tiles are rebuilt every frame. Per tile: 25,600 lattice candidates, each calling cellForest (4 string-keyed Map lookups via district(i+','+j)), two 2-octave fbm (16 h2), seaKm, a loop over nearby villages — roughly 5-15 ms per tile. At 1920x1080 the tile count is (W*mpp/2048+1)*(H*mpp/2048+1): 209 tiles at mpp=18, ~470 at mpp=29.9. Above 200 the FIFO cacheGet evicts tiles that are still in view, so every frame regenerates hundreds of tiles (seconds per frame), and even below the cap the first frame after crossing mpp=30 stalls for several seconds while fade=smooth(30,18,mpp) is ~0 so nothing is visible. Also `if (sea > 0.2 || coastal)` is vacuous (sea<=0.2 implies coastal), so open-sea tiles also rasterise a fineMask and run the full loop; and tx/ty/tr/tt/tp are plain double arrays (~1 MB per forested tile, ~200 MB at cap).
+  FIX: (a) Do not build micro tiles until they can be seen: gate the tile build on `mpp < 18` (extend the district layer to `mpp >= 18`) or, better, build lazily with a per-frame budget: in draw(), `let budget = 6; ... const key=i+','+j; let t = MICRO.get(key); if (!t) { if (budget-- <= 0) { pending = true; continue; } t = micro(i,j); } tiles.push(t);` and set `dirty = true` when pending. (b) Raise the MICRO limit to cover the worst case at the build threshold (>= 600) or make cacheGet LRU by re-inserting on hit. (c) In micro(), sample forest once per tile into a local 5x5 Float32Array of cell-centre values (cells floor(x0/T)-1 .. +3) and bilinearly interpolate from that instead of calling cellForest (4 Map lookups) per candidate. (d) Skip the lattice when the mask is empty (`mask && !mask.some(v=>v)`), and store tx/ty/tr as Float32Array, tt/tp as Uint8Array/Float32Array.
+
+[F2] (high, 0.85) src/template.html line 928 `const spacing = clamp(mpp * 2.6, 12.8, 80), keep = (12.8 / spacing) ** 2;`, tree loop line 957, shadow pass line 949-951, drawTree line 725
+  CLAIM: The tree thinning keeps the on-screen tree count constant at W*H/6.76 (one tree per 2.6x2.6 px) for the whole 4.9-30.8 m/px band: candidates on screen = W*H*mpp^2/163.84, keep = 163.84/(6.76*mpp^2), so ~306k candidates at 1080p, ~200k of them trees in forested terrain, each a separate `ctx.fillStyle=` + fillRect (or an arc path for rr>=0.7 px), plus inView/inTown per tree — 100-300 ms per frame, drawn at alpha~0 between mpp 18 and 30. Below 4.9 m/px keep=1 and the count is W*H*mpp^2/164 with arc paths: ~210k arc fills at mpp=4.9, ~35k trees x (shadow arc + 1-2 arcs) at mpp=2 — well over 30 ms until roughly mpp<0.7.
+  FIX: Treat sub-2-px trees as texture, not objects: (1) in micro() also accumulate a per-tile 64x64 density grid (count of accepted candidates per 32 m cell) and, when `r*s < 1.5` (mpp > ~3), paint the tile with one drawImage of a cached offscreen canvas coloured from that grid; (2) only iterate individual trees when `mpp < 3`, and there thin to a screen spacing of >= 4 px: `spacing = Math.max(12.8, 4*mpp)` so count <= W*H/16; (3) for the remaining fast-path trees batch by colour: collect rects into 3 paths (`ctx.rect`) and call fill() once per colour instead of setting fillStyle 200k times. Apply the same gate to the shadow pass (line 949).
+
+[F3] (high, 0.8) src/template.html line 849 `let f = r.f; if (mpp < 100) { f = subdivide(f, 25 * mpp, false); }` and line 850 (fbm wobble per point), bbox test line 846
+  CLAIM: Rivers are culled only by whole-polyline bbox, then the ENTIRE polyline is resampled to 25 px spacing and wobbled with two 2-octave fbm calls per point (16 h2), twice (two stroke passes), regardless of how much of it is on screen. A 300 km river (Tone, Shinano, Kiso) at S_MAX (mpp=0.042, maxLen=1.04 m) becomes ~290k points per pass: ~580k fbm-wobbled vertices and two 290k-vertex strokes per frame, plus two ~4.6 MB array allocations — hundreds of ms. Already ~40 ms at mpp=0.2, and it triggers anywhere in the river's basin bbox (the whole Kanto plain for the Tone).
+  FIX: Clip per segment to the padded view before subdividing and break the path at gaps: `const px0=v.x0-50*mpp, px1=v.x1+50*mpp, py0=v.y0-50*mpp, py1=v.y1+50*mpp; const g=[]; let open=false; for (let i=0;i+3<f.length;i+=2){const ax=f[i],ay=f[i+1],bx=f[i+2],by=f[i+3]; if (Math.max(ax,bx)<px0||Math.min(ax,bx)>px1||Math.max(ay,by)<py0||Math.min(ay,by)>py1){open=false;continue;} if(!open){g.push(NaN,NaN);open=true;} /* push ax,ay and ceil(d/maxLen)-1 interpolated points */ }` and in the wobble loop treat a NaN vertex as moveTo. Additionally quantise `25*mpp` to the same power-of-two band wobblePath uses and cache the subdivided array on the river object per band (r.sub[band]).
+
+[F4] (medium, 0.75) src/template.html line 943 `if (mpp > 5) { for (const b of Tn.blocks) if (inView(b.x, b.y, 200)) for (const l of b.lots) { ... quadPath(l.q, ...); ctx.fill(); } }` (also line 968 and shadow line 953); lots built line 694-705, Kyoto gw/gh line 687
+  CLAIM: Every machiya lot is a separate quadPath+fill. Kyoto has nx*ny = 26*35 = 910 blocks x ~31 lots (two sides x ~17 lots of 5-8 m, 90% kept) ~ 28k lots, so with Kyoto within 6 km of the view in the 5-30 m/px band the frame does ~28k 5-call paths + fillStyle + fill (~100 ms) to draw roofs that are 0.2-1.5 px wide; below 5 m/px the same loop runs again with an extra stroke per lot plus a shadow quad per lot.
+  FIX: Precompute one quad per block in town(): `b.q = rect(lx, ly, blockW - 6, blockH - 6)` and, when `blockW * s < 6` (mpp > ~10), fill only `b.q` with a single roof colour; iterate `b.lots` only when `mpp < 5`. Alternatively bake each town's lots once into a Path2D per roof colour (4 paths) and fill those 4 paths per frame.
+
+[F5] (medium, 0.65) src/template.html line 893 `const a = smooth(90, 60, mpp)` and line 900 `treeBlobGlyph(...)` loop; region forest texture line 878-889
+  CLAIM: In the 30-90 m/px band every district cell with forest>0.3 draws up to 4 treeBlobGlyphs (2 path fills each, 4 arcs) plus paddy discs and 3-5 fillRects per village, with the glyph radius clamped to 2.5 px. At 1080p and mpp~89 that is ~300 districts, ~4.8k cells, ~5-7k blob glyphs (12-14k fills) and ~12k village fillRects, while `a` is ~0 (0.07 at mpp 85), and the region forest texture (line 878, another ~2k blobs from 7.2k lattice cells) runs in the same band. Expect 40-80 ms per frame at alpha ~0.
+  FIX: Guard the whole district pass with `if (a > 0.02)` and the forest-texture pass with its own `if (a > 0.02)`; cap the per-cell glyph count when cells are small: `const k = cs < 40 ? (c.forest > 0.5 ? 1 : 0) : Math.round(c.forest * 4);` (cs = T*s is 23 px at mpp 89). Longer term, bake each district's 16 cells into a 64x64 offscreen sprite once and drawImage it.
+
+[F6] (medium, 0.55) src/template.html line 1058 `pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: cam.s }`, line 1062 `(pinch.s * d / pinch.d) / cam.s`, zoomAt line 1052, draw guard line 795
+  CLAIM: If the two pointers start at the same coordinates pinch.d is 0. On the next move `pinch.s * d / 0` is Infinity (jumps to S_MAX) or, if d is also 0, NaN. clamp(NaN) returns NaN (both comparisons false), `s2 === cam.s` is false for NaN, so zoomAt sets cam.s, cam.x, cam.y all to NaN. draw() only repairs cam.s (`cam.s || S_MIN`), cam.x/cam.y stay NaN, tx/ty and the view rect are NaN, nothing is drawn, and flyTo/homeView cannot recover because lerp(NaN, x1, e) is NaN — the map is permanently blank until reload.
+  FIX: In zoomAt: `if (!(k > 0) || !isFinite(k)) return;` In pointerdown: `pinch = { d: Math.max(8, Math.hypot(...)), s: cam.s };` And harden the draw guard: `if (!isFinite(cam.x) || !isFinite(cam.y)) { cam.x = 45000; cam.y = -250000; }`.
+
+[F7] (low, 0.8) src/template.html line 1105 `if (fly) { ... cam.s = ls; cam.x = lerp(...); cam.y = lerp(...) }` vs pointerdown line 1058, wheel line 1056, keydown line 1076
+  CLAIM: User input never cancels an active fly: pointermove/wheel/+/- modify cam, but the fly block overwrites cam.x/cam.y/cam.s on the next frame, so for the 1.4 s after a double-click, a goto selection or Home, dragging and wheel-zoom are silently ignored (and the map visibly snaps back). Reproducible: double-click, then immediately drag.
+  FIX: Cancel the animation on any direct input: add `fly = null;` at the top of the pointerdown and wheel handlers and inside zoomAt (before the clamp), keeping keyboard Home/goto as the only fly initiators.
+
+[F8] (low, 0.75) src/template.html line 925 `if (!vseen.has(vl.seed)) { vseen.add(vl.seed); vill.push(vl); }`; seeds built at line 526 `vseed = seed + a * 17 + b * 131` and line 535 `seed + 9973 + STATIONS.indexOf(st)`
+  CLAIM: Villages are de-duplicated across tiles by `seed`, but village seeds are `floor(h2(i,j,11)*1e6) + offset` (offset <= 444, or 9973+index for post towns) and are not unique across districts; two different villages in view can share a seed (~1e-6 per pair, ~1-2% per frame with 200 villages in view), in which case the second village is silently dropped from that frame (no paddies, huts, label) — a nondeterministic-looking hole that depends on what else is on screen.
+  FIX: Give each village a unique key at creation and dedupe on it: in district() add `key: i + ',' + j + ':' + (a * 4 + b)` to cell villages and `key: i + ',' + j + ':s' + STATIONS.indexOf(st)` to post towns; in draw use `vseen.has(vl.key)` / `vseen.add(vl.key)`. (Do not switch to object identity alone: after DIST eviction the same village can exist as two objects, which the key still catches.)
+
+[F9] (low, 0.9) src/template.html line 683 `Tn.huts.push({ x: rot((R() - 0.5) * hw * 0.7, 20 + R() * hh * 0.3)[0], y: rot((R() - 0.5) * hw * 0.7, 20 + R() * hh * 0.3)[1], ...`
+  CLAIM: x and y of each castle hall come from two different rot() calls fed by four independent R() draws, so the hall is at (x of point P1, y of point P2), which is not the rotation of any point in the intended inner-bailey rectangle; for rotated towns (a not a multiple of 90 deg) the hall can land outside the walls or in the moat. Deterministic, but wrong placement.
+  FIX: `for (let k = 0; k < 3; k++) { const [x, y] = rot((R() - 0.5) * hw * 0.7, 20 + R() * hh * 0.3); Tn.huts.push({ x, y, w: 12, d: 7, a, roof: '#5f6470', t: 'hall' }); }`
+
+[F10] (low, 0.7) src/template.html layout(): line 571 `if (seaKm(hx, hy) < 0.3) continue;`, 581/585/599/606 `seaKm(...) < 0.4`, district() line 521-522; tools/build.mjs line 227 `Math.max(1, Math.round(dSea[i] * KM))`
+  CLAIM: All village geometry (huts, shrine, groves, paddies, paths, village centre) is land-tested only against the 1/60 deg raster G channel, which is quantised to whole km and is >= 2 on any land cell next to the sea (dSea=1 cell x 1.66 km rounds to 2), so seaKm ramps 0->2 across one ~1.7 km cell and the `< 0.5` / `< 0.3` thresholds sit ~0.4 km inside the sea cell. The raster coast therefore differs from the drawn Natural Earth coast by up to ~1-1.5 km, and coastal villages are regularly drawn with huts and paddies standing on the sea fill. The exact per-tile mask (fineMask/landAt) already exists but is only consulted for wild trees.
+  FIX: In layout(v) build one mask for the village once: `const m = fineMask(v.x - 800, v.y - 800, 1600); const landAt = (x, y) => { const mx = ((x - v.x + 800) / 1600 * 128) | 0, my = ((y - v.y + 800) / 1600 * 128) | 0; return mx >= 0 && my >= 0 && mx < 128 && my < 128 && m[my * 128 + mx] === 1; };` and replace every `seaKm(px,py) < 0.3/0.4` test in layout() with `!landAt(px, py)` (keep seaKm only for the fishing/boat gradient descent). Optionally apply the same to the village-centre test in district() line 521-522.
+
+[F11] (low, 0.9) src/template.html line 1092 `for (let i = -40; i < 40; i++) for (let j = -60; j < 40; j++) { const d = DIST.get(i + ',' + j); ...` and the fallback `Math.floor(Math.random() * 80) - 40`, `* 100) - 60`
+  CLAIM: 'uma vila qualquer' only considers districts with i in [-40,40) and j in [-60,40), i.e. x in [-328 km, 328 km) and y in [-492 km, 328 km), which is lon >= 133.4 E and lat >= 33.05 N. Kyushu (lon 129.5-131.5 -> i ~ -83..-60), western Chugoku, southern Shikoku and Hokkaido (j ~ -95) can never be picked, in either the cached scan or the random fallback.
+  FIX: Scan what is actually cached and widen the fallback to the whole archipelago: `for (const d of DIST.values()) for (const vv of d.villages) if (vv.size >= 2) cand.push(vv);` and in the fallback use `i = Math.floor(Math.random() * 185) - 90` (i in [-90, 95)) and `j = Math.floor(Math.random() * 165) - 100` (j in [-100, 65)).
+
+[F12] (low, 0.5) src/template.html line 934 `else { for (const p of L.paddies) { if (!inView(p.cx, p.cy, 60)) continue; quadPath(p.q, s, tx, ty); ctx.fillStyle = p.col; ctx.fill(); if (village) { ... ctx.stroke(); }`
+  CLAIM: Below 9 m/px every paddy is an individual quadPath + fillStyle + fill (plus a stroke below 6 m/px). A size-3 village has up to ~1,450 paddies (2*nu x 2*nw lattice) and typically 300-500; at mpp 6-9 a 1080p view holds ~15-25 villages, i.e. 5-10k individual quad fills of 2-4 px cells per frame (~15-25 ms) before any trees or lots are drawn, stacking with F2 in the same band.
+  FIX: Keep the disc representation until the cells are legible: change `if (mpp > 9)` to `if (mpp > 4)`, and for the detailed branch group paddies by colour once in layout() into Path2D objects (`L.paddyPaths = Map<color, Path2D>` built in world units) so the per-frame cost is one fill per colour under `ctx.setTransform(dpr*s,0,0,dpr*s,dpr*tx,dpr*ty)`.
+

@@ -22,10 +22,11 @@
  *   - layers are named groups (casco, conves, torres, ...): hide one and the
  *     ship keeps working
  *
- * Yamato is measured off the builders' plan NH 111711 (Naval History & Heritage
- * Command, public domain): hull run 4.584 px for 263 m, cross-checked against
- * the beam, stations read with a metre rule laid over the sheet. She is drawn
- * in both the 1941 fit that sheet shows and the 1945 fit she died in.
+ * Yamato is measured off two drawings: the builders' plan NH 111711 (Naval
+ * History & Heritage Command, public domain) for the hull and the stations,
+ * and Alexpl's colour plan of 7 April 1945 (Wikimedia, CC BY-SA 3.0) for the
+ * fit she died in. Nothing is traced — these are measurements read off the
+ * sheets, and the geometry is rebuilt from the numbers.
  *
  * IOWA IS NOT MEASURED. Her stations are estimated from general proportion, the
  * same standing Yamato's had before the plan was read. The US Navy's Booklets
@@ -163,13 +164,14 @@ function secTurret(o) {                            // a light triple: 15.5 cm or
 function twinDP(x, y, rot, cal) {
   const w = cal > 12 ? 4.6 : 4.2, l = cal > 12 ? 4.4 : 4.0, bl = cal * 0.40;
   const shield = `M${f(-l * 0.45)} ${f(-w / 2 * 0.74)}L${f(-l * 0.2)} ${f(-w / 2)}L${f(l * 0.42)} ${f(-w / 2)}L${f(l * 0.55)} ${f(-w / 2 + 0.7)}L${f(l * 0.55)} ${f(w / 2 - 0.7)}L${f(l * 0.42)} ${f(w / 2)}L${f(-l * 0.2)} ${f(w / 2)}L${f(-l * 0.45)} ${f(w / 2 * 0.74)}Z`;
-  const out = [el('circle', { class: 'reparo-base', cx: 0, cy: 0, r: w * 0.56 }), el('path', { class: 'reparo', d: shield })];
+  const out = [el('circle', { class: 'aa-tina', cx: 0, cy: 0, r: w * 0.78 }), el('circle', { class: 'reparo-base', cx: 0, cy: 0, r: w * 0.56 }), el('path', { class: 'reparo', d: shield })];
   for (const s of [-1, 1]) out.push(el('rect', { class: 'cano', x: -l * 0.45 - bl, y: s * 0.75 - 0.16, width: bl, height: 0.32, rx: 0.14 }));
   return g(null, out, { transform: `translate(${f(x)} ${f(y)}) rotate(${f(rot || 0)})`, class: 'dp' });
 }
 /* a 25 mm triple (IJN) — the mount that covered Yamato from end to end in 1945 */
 function aa25(x, y, rot) {
   const out = [
+    el('circle', { class: 'aa-tina', cx: 0, cy: 0, r: 2.3 }),
     el('circle', { class: 'aa-base', cx: 0, cy: 0, r: 1.45 }),
     el('path', { class: 'aa', d: `M-1.0 -1.15L0.75 -1.15L1.25 -0.5L1.25 0.5L0.75 1.15L-1.0 1.15Z` }),
   ];
@@ -390,6 +392,7 @@ const CSS = `
   .reparo-base{fill:var(--aco-baixo)}
   .reparo{fill:var(--reparo);stroke:var(--linha);stroke-width:.16}
   .aa-base{fill:var(--aco-baixo)}
+  .aa-tina{fill:var(--aco-2);stroke:var(--linha);stroke-width:.2}
   .aa{fill:var(--aa);stroke:var(--linha);stroke-width:.12}
   .diretor{fill:var(--diretor);stroke:var(--linha);stroke-width:.18}
   .radar-tela{fill:var(--aco-alto);stroke:var(--linha);stroke-width:.14;opacity:.92}
@@ -401,7 +404,10 @@ const CSS = `
   .catapulta-trilho{fill:var(--aco);opacity:.75}
   .catapulta-carro{fill:var(--aco-alto);stroke:var(--linha);stroke-width:.14}
   .catapulta-pivo{fill:var(--aco-baixo);stroke:var(--linha);stroke-width:.14}
-  .barco{fill:var(--lona);stroke:var(--linha);stroke-width:.14}
+  .barco{fill:var(--lona);stroke:var(--linha);stroke-width:.14;opacity:.55}
+  .paiol-botes{fill:var(--aco-1);stroke:var(--linha);stroke-width:.25}
+  .paiol-abertura{fill:#1d2225}
+  .paiol-porta{fill:var(--aco-3);stroke:var(--linha);stroke-width:.16}
   .barco-cabine{fill:var(--aco-baixo);opacity:.8}
   .aviao-fus{fill:var(--aco-5);stroke:var(--linha);stroke-width:.14}
   .aviao-asa{fill:var(--aco-2);stroke:var(--linha);stroke-width:.14}
@@ -520,13 +526,26 @@ function yamato(fit) {
   sup.push(tower(T.ap, [{ x: 0, l: 15, w: 12.5, r: 3.4 }, { x: 0.8, l: 10, w: 8.6, r: 3 }, { x: 1.2, l: 6.4, w: 6.0, r: 2.6 }]));
   sup.push(el('rect', { class: 'telemetro', x: T.ap + 0.6, y: -5.2, width: 1.6, height: 10.4, rx: 0.5 }));
   sup.push(director(T.ap + 2, 0, { r: 1.9 }));
-  // boat deck: the cutters and launches amidships, and the two big derricks
+  /* The boats. Every other battleship of the war stowed hers on the upper deck
+     amidships, in plain sight from above — and that is where I had put them,
+     which was wrong twice over.
+     Yamato's 46 cm guns threw a blast that wrecked anything left standing on
+     deck, so she was given something no other battleship had: an enclosed
+     stowage aft that the boats were hauled back into.
+       呉市海事歴史科学館: 「つんである短艇をしまうための倉庫をつくり、
+       引き込んで格納することにした」
+     So from directly above there are no boats to see. What there is, is the
+     stowage itself, on the centreline right aft, and the derrick that worked
+     them. */
   const deck = [];
-  for (const s of [-1, 1]) {
-    deck.push(crane(T.mm + 9, s * 10.5, { len: 13, angle: 58 }));
-    for (let i = 0; i < 4; i++) deck.push(boat(T.fn + 9 + i * 8.5, s * 13.4, 0, 8.5 + (i % 2) * 2.5, 2.4));
-    deck.push(boat(T.fn - 11, s * 14.0, 0, 11, 2.8));
+  deck.push(el('rect', { class: 'paiol-botes', x: 238, y: -4.6, width: 19, height: 9.2, rx: 1.4 }));
+  deck.push(el('rect', { class: 'paiol-abertura', x: 239.5, y: -3.4, width: 16, height: 6.8, rx: 1.0 }));
+  for (const s of [-1, 1]) {                          // the boats, inside, barely showing
+    deck.push(boat(246, s * 1.9, 0, 11.5, 2.6));
+    deck.push(boat(240.5, s * 1.9, 0, 8.0, 2.2));
   }
+  deck.push(el('rect', { class: 'paiol-porta', x: 255.6, y: -3.4, width: 1.6, height: 6.8, rx: 0.4 }));
+  deck.push(crane(231, 10.5, { len: 13, angle: 128 }));  // the derrick that worked them, starboard quarter
 
   /* --- 1945 anti-aircraft: twelve twin 12.7 cm and fifty-two triple 25 mm.
      The twins ride the superstructure deck edge, the 25s fill every flat
@@ -562,10 +581,11 @@ function yamato(fit) {
       d: `M${f(226)} ${f(s * 2.6 + off)}Q${f(234)} ${f(s * 7.4 + off)} ${f(249)} ${f(s * 8.6 + off)}`,
     }));
   }
-  av.push(crane(251, 0, { len: 11, angle: 152 }));
   av.push(el('circle', { class: 'escotilha', cx: 226, cy: 0, r: 2.4 }));          // the lift to the hangar
-  av.push(floatplane(232, -6.6, 16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
-  av.push(floatplane(232, 6.6, -16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
+  if (fit === '1941') {                               // on the Ten-Go sortie she carried none
+    av.push(floatplane(232, -6.6, 16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
+    av.push(floatplane(232, 6.6, -16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
+  }
   for (const s of [-1, 1]) { av.push(bollard(L - 8, s * 2.6)); av.push(bollard(L - 4.5, s * 1.8)); }
   av.push(el('rect', { class: 'ancora', x: L - 7.5, y: -1.0, width: 2.6, height: 2.0, rx: 0.4 }));
 

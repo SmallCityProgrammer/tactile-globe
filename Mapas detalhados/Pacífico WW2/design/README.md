@@ -49,8 +49,9 @@ dá.
 | secundária (1945) | 2 × 3 de 15,5 cm + 12 × 2 de 12,7 cm | 10 × 2 de 12,7 cm |
 | secundária (1941) | 4 × 3 de 15,5 cm + 6 × 2 de 12,7 cm | — |
 | antiaérea leve | ~52 triplos de 25 mm (8 em 1941) | 20 quádruplos de 40 mm + ~49 de 20 mm |
-| aviação | 7 hidros, 2 catapultas | 3 hidros, 2 catapultas |
+| aviação | 7 hidros, 2 catapultas (nenhum embarcado na Ten-Gō) | 3 hidros, 2 catapultas |
 | chaminés | **1** (com favo de mel na boca) | **2** |
+| embarcações | em **paiol fechado à ré** | no convés, a meia-nau |
 
 O Yamato sai nos dois portes; a Iowa, como andava ao largo do Japão em 1945.
 
@@ -62,6 +63,48 @@ ele nunca precisou passar por lá. É o que a folha de comparação mostra de ca
 Iowa em Measure 22 (azul-marinho no casco até a borda, cinza-neblina acima) com
 o teca tingido de **Deck Blue 20-B** — que é o que a US Navy passou a fazer a
 partir de 1943. Por isso um convés é quente e o outro é azul.
+
+---
+
+## As referências
+
+| | o que é | licença |
+|---|---|---|
+| [NH 111711](https://commons.wikimedia.org/wiki/File:Builders_plans_for_the_Japanese_battleship_Yamato_(NH_111711).png) | prancha japonesa 第18図 戦艦大和の外見見取図 — **perfil e planta** na mesma escala, mais a tabela de características. Porte de 1941 | domínio público (EUA e Japão) |
+| [Yamato1945.png](https://commons.wikimedia.org/wiki/File:Yamato1945.png), de Alexpl | **planta e perfil em cores**, 4.177 × 2.026, no porte de 7 de abril de 1945, com barra de escala própria | CC BY-SA 3.0 / GFDL |
+| [大和ミュージアム — 艦載艇](https://yamatomuseum.securesite.jp/annex/?page_id=942) | o museu de Kure sobre as embarcações de bordo | — |
+
+Nada disso é copiado: são medidas lidas em cima do desenho, e a geometria toda
+é reconstruída em SVG a partir dos números. Uma medida não tem dono.
+
+---
+
+## As embarcações ficavam escondidas
+
+Esse foi o erro mais feio da primeira versão e vale registrar por quê.
+
+Eu tinha espalhado escaleres pelos dois bordos no meio-navio, que é onde
+qualquer outro encouraçado da guerra levava os seus — e onde eles apareciam de
+cima. No Yamato não. O museu de Kure explica:
+
+> 46 cm の主砲の爆風で搭載艇が壊れてしまうため、**つんである短艇をしまうための
+> 倉庫をつくり、引き込んで格納することにした**
+
+O sopro dos canhões de 46 cm destruía o que ficasse exposto no convés, então
+ela ganhou uma coisa que nenhum outro encouraçado tinha: **um paiol fechado à
+ré, para onde as embarcações eram recolhidas**. Elas ficavam no 艦尾 — a popa —
+e não à vista.
+
+As duas plantas confirmam: não há uma única embarcação no convés superior, nem
+em 1941 nem em 1945. O que existe é o paiol na linha de centro, bem a ré, e o
+pau de carga que as manobrava.
+
+A planta colorida de 1945 corrigiu mais duas coisas no meio-navio: a antiaérea
+leve é uma **floresta de tinas circulares encostadas umas nas outras**,
+transbordando para fora da borda do convés — não os reparos espaçados que eu
+tinha —, e o tombadilho a ré da quebra do convés é **chapa de aço cinza**, não
+madeira. E na saída para Okinawa ela não levava avião nenhum: tinham sido
+voados para terra.
 
 ---
 

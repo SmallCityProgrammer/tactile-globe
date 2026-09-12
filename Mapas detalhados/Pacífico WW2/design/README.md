@@ -73,6 +73,7 @@ partir de 1943. Por isso um convés é quente e o outro é azul.
 | [NH 111711](https://commons.wikimedia.org/wiki/File:Builders_plans_for_the_Japanese_battleship_Yamato_(NH_111711).png) | prancha japonesa 第18図 戦艦大和の外見見取図 — **perfil e planta** na mesma escala, mais a tabela de características. Porte de 1941 | domínio público (EUA e Japão) |
 | [Yamato1945.png](https://commons.wikimedia.org/wiki/File:Yamato1945.png), de Alexpl | **planta e perfil em cores**, 4.177 × 2.026, no porte de 7 de abril de 1945, com barra de escala própria | CC BY-SA 3.0 / GFDL |
 | [大和ミュージアム — 艦載艇](https://yamatomuseum.securesite.jp/annex/?page_id=942) | o museu de Kure sobre as embarcações de bordo | — |
+| [BB-61 Booklet of General Plans (1984)](https://archive.org/details/bb61bogp1984v3), prancha 7 | a planta do **convés principal** da própria Bureau of Ships, BU. NO. 578068, escala 1/16"=1'-0", escaneada a 300 dpi | domínio público (obra da US Navy) |
 
 Nada disso é copiado: são medidas lidas em cima do desenho, e a geometria toda
 é reconstruída em SVG a partir dos números. Uma medida não tem dono.
@@ -153,10 +154,46 @@ aos 50 m do talha-mar**, onde eu tinha 16.
 A casamata das torres também encolheu: a planta dá 16 m de comprimento com o
 centro da barbeta 6 m atrás da face, e não os 21 m que eu tinha suposto.
 
-**A Iowa continua por medir.** As estações dela ainda são estimativa pela
-proporção geral, mesmo nível de confiança que o Yamato tinha antes desta
-passagem. Os *Booklets of General Plans* da US Navy estão em domínio público e
-resolveriam do mesmo jeito.
+### A Iowa, pelas cavernas
+
+A planta da Bureau of Ships resolve a Iowa de um jeito que nenhuma das duas
+folhas do Yamato permitia: ela **numera as cavernas ao longo da linha de
+centro**. Medidas com régua de pixel, elas caem a 75,2 px uma da outra — o que
+a 61,52 px/m dá 1,222 m, quatro pés a menos de um centímetro. E a caverna 0
+fica 6,34 m a ré do talha-mar:
+
+    metros da proa = 6,34 + caverna × 1,222
+
+Ou seja, uma estação aqui **não é estimativa: é um número de caverna**. A
+barbeta que a folha rotula ("BARBETTE FOR TURRET NO. 2") mede na caverna 74,5.
+Torre 1 na 58, torre 3 na 160. Números redondos são como se sabe que a leitura
+está certa.
+
+A escala saiu sem chute nenhum: a folha declara 1/16"=1'-0" e o cabeçalho JFIF
+do escaneamento declara 300 dpi, o que dá 61,52 px/m — e as cavernas de quatro
+pés confirmaram por outro caminho.
+
+| | antes | caverna | medido | Δ |
+|---|---|---|---|---|
+| torre 1 | 66 m | 58 | **77,2 m** | +11,2 |
+| torre 2 | 87 m | 74 | **96,8 m** | +9,8 |
+| ponte / torre de comando | 114 m | 86 | **111,4 m** | −2,6 |
+| chaminé de vante | 130 m | 104 | **133,4 m** | +3,4 |
+| chaminé de ré | 156 m | 131 | **166,4 m** | +10,4 |
+| mastro de treliça | 172 m | 142 | **179,9 m** | +7,9 |
+| posto de ré | 188 m | 145 | **183,5 m** | −4,5 |
+| torre 3 | 206 m | 160 | **201,9 m** | −4,1 |
+| catapultas | 255 m | 196 | **245,9 m** | −9,1 |
+
+Mesmo padrão do Yamato: o grupo de vante estava avante demais, uns 10 m. O
+casco, esse já estava bom — conferido em duas estações, errava menos de meio
+metro.
+
+Uma ressalva honesta: a prancha é de **1984**, da Iowa reativada. O casco, as
+três barbetas e as tomadas das chaminés não mudaram desde 1943, e é só isso que
+foi lido dela. O que ela **não** serve para dizer é a antiaérea leve de 1945 —
+os Bofors e Oerlikon já não existiam em 1984 —, e ali as posições continuam
+estimadas.
 
 **Trava útil, independente de qualquer planta:** a torre 3 do Yamato em 198 m,
 com 6 m de face e 15,8 m de cano, põe a boca dos canhões em 219,8 m — e é

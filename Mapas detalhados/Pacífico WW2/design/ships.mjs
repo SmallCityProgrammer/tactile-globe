@@ -28,9 +28,12 @@
  * fit she died in. Nothing is traced — these are measurements read off the
  * sheets, and the geometry is rebuilt from the numbers.
  *
- * IOWA IS NOT MEASURED. Her stations are estimated from general proportion, the
- * same standing Yamato's had before the plan was read. The US Navy's Booklets
- * of General Plans are public domain and would settle them the same way.
+ * Iowa is measured off the Bureau of Ships main-deck plan (BU. NO. 578068,
+ * 1/16" = 1'-0", scanned at 300 dpi), which numbers its frames along the
+ * centreline — so her stations are frame numbers rather than estimates. That
+ * sheet is from her 1984 reactivation, and only what did not change since 1943
+ * was read from it: the hull, the three barbettes, the uptakes. Her 1945 light
+ * AA is still placed by eye, because in 1984 none of it was there.
  */
 import fs from 'fs';
 import path from 'path';
@@ -611,7 +614,17 @@ function iowa() {
     [264, 5.2], [268.5, 2.6], [270.4, 0],
   ]);
   const edge = x => H.halfAt(x);
-  const T = { n1: 66, n2: 87, br: 114, f1: 130, f2: 156, mm: 172, ct: 188, n3: 206 };
+  /* Stations read off the Bureau of Ships main-deck plan (BU. NO. 578068,
+     plate 7 of 18, 1/16" = 1'-0", scanned at 300 dpi = 61,52 px/m). The sheet
+     numbers its frames along the centreline. Measured against a pixel rule
+     they fall 75,2 px apart — 1,222 m, which is four feet to within a
+     centimetre — and frame 0 lands 6,34 m abaft the stem:
+         metros da proa = 6,34 + caverna × 1,222
+     So a station here is a frame number, not a guess. Turret 2's barbette, the
+     one the sheet labels, measures out at frame 74,5; turret 1 at 58 and
+     turret 3 at 160. Round numbers are how you know the reading is right. */
+  const FR = f => 6.34 + f * 1.222;
+  const T = { n1: FR(58), n2: FR(74), br: FR(86), f1: FR(104), f2: FR(131), mm: FR(142), ct: FR(145), n3: FR(160) };
 
   const conves = [];
   conves.push(el('path', { class: 'conves', d: H.inset(0.5) }));
@@ -625,7 +638,7 @@ function iowa() {
     proa.push(el('circle', { class: 'ventilador', cx: 45, cy: s * 2.6, r: 1.4 }));
     for (let i = 0; i < 6; i++) proa.push(bollard(16 + i * 6, s * (edge(16 + i * 6) - 1.4)));
   }
-  proa.push(breakwater(T.n1 - 23, edge));
+  proa.push(breakwater(T.n1 - 17, edge));
   for (let i = 0; i < 7; i++) proa.push(vent(24 + i * 5, 0, 0.65));
 
   /* the 16"/50 Mk 7: fifty calibres of 40.6 cm is 20.3 m of gun, within a
@@ -671,7 +684,7 @@ function iowa() {
   /* ten twin 5"/38 — five a side, the tightest secondary battery of the war —
      twenty quad Bofors and a rank of Oerlikons along both deck edges */
   const aa = [];
-  for (const x of [104, 120, 140, 160, 178]) for (const s of [-1, 1]) aa.push(twinDP(x, s * 12.6, s > 0 ? 90 : -90, 12.7));
+  for (const f of [78, 92, 106, 120, 134]) { const x = FR(f); for (const s of [-1, 1]) aa.push(twinDP(x, s * (edge(x) - 3.8), s > 0 ? 90 : -90, 12.7)); }
   const bof = [];
   for (const x of [T.n2 + 10, T.n2 + 10]) void x;
   for (const s of [-1, 1]) {
@@ -691,11 +704,11 @@ function iowa() {
   /* aviation on the fantail: two catapults over the transom, the crane between
      them, and the Kingfishers that spotted for the 16 inch guns */
   const av = [];
-  for (const s of [-1, 1]) av.push(catapult(L - 15, s * 6.2, s * 14, 21.0));
-  av.push(crane(L - 37, 0, { len: 11, angle: 158 }));
-  av.push(el('circle', { class: 'escotilha', cx: L - 40, cy: 0, r: 2.4 }));
-  av.push(floatplane(L - 29, -5.8, 14, { span: 10.9, len: 10.3, mark: 'star' }));
-  av.push(floatplane(L - 29, 5.8, -14, { span: 10.9, len: 10.3, mark: 'star' }));
+  for (const s of [-1, 1]) av.push(catapult(FR(196), s * 6.4, s * 14, 21.0));
+  av.push(crane(FR(186), 0, { len: 11, angle: 158 }));
+  av.push(el('circle', { class: 'escotilha', cx: FR(184), cy: 0, r: 2.4 }));
+  av.push(floatplane(FR(202), -5.8, 14, { span: 10.9, len: 10.3, mark: 'star' }));
+  av.push(floatplane(FR(202), 5.8, -14, { span: 10.9, len: 10.3, mark: 'star' }));
   for (const s of [-1, 1]) { av.push(bollard(L - 9, s * 2.2)); av.push(bollard(L - 5, s * 1.5)); }
 
   const misc = [];

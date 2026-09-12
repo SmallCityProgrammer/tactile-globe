@@ -1,7 +1,8 @@
 /*
  * ships.mjs — plan views of a battleship, drawn from her general arrangement
  *
- *   node design/ships.mjs        ->  design/yamato.svg
+ *   node design/ships.mjs        ->  design/yamato.svg       (porte de 1945)
+ *                                    design/yamato-1941.svg  (porte da planta)
  *                                    design/iowa.svg
  *                                    design/comparacao.svg
  *
@@ -21,10 +22,14 @@
  *   - layers are named groups (casco, conves, torres, ...): hide one and the
  *     ship keeps working
  *
- * The fit drawn is APRIL 1945 for both: Yamato as she sailed for Okinawa on
- * Ten-Go (wing 15.5 cm turrets long gone, 12.7 cm and 25 cm guns everywhere),
- * Iowa as she looked off Japan (Measure 22, twenty quad Bofors, the radar suite
- * that is her most obvious feature from above).
+ * Yamato is measured off the builders' plan NH 111711 (Naval History & Heritage
+ * Command, public domain): hull run 4.584 px for 263 m, cross-checked against
+ * the beam, stations read with a metre rule laid over the sheet. She is drawn
+ * in both the 1941 fit that sheet shows and the 1945 fit she died in.
+ *
+ * IOWA IS NOT MEASURED. Her stations are estimated from general proportion, the
+ * same standing Yamato's had before the plan was read. The US Navy's Booklets
+ * of General Plans are public domain and would settle them the same way.
  */
 import fs from 'fs';
 import path from 'path';
@@ -313,6 +318,7 @@ function director(x, y, o) {                       // a gun director with its ra
    Every colour the drawing uses, once, at the top. Re-skinning the ship is
    editing this block and nothing else. */
 const PALETTE = {
+  
   yamato: `
     --casco:#5d6660; --casco-borda:#2e3531; --casco-baixo:#495049;
     --conves:#a08a62; --conves-veio:#6d5a3c; --conves-junta:#7d6a48;
@@ -412,33 +418,47 @@ const CSS = `
 
 /* --------------------------------------------------------------- the ships */
 
-function yamato() {
+/* Yamato, measured off the builders' plan NH 111711 (Naval History & Heritage
+   Command, public domain) — the Japanese sheet that carries a profile and a
+   plan of the ship as completed, with her characteristics tabulated.
+   The hull run on that sheet is 4.584 px for 263 m, which is 17,43 px/m; the
+   beam measures 689 px, which at that scale is 39,5 m against a stated 38,9 —
+   a 1,5% overshoot that is the thickness of the ink. Everything below was read
+   off the sheet with a metre rule laid over it and then scaled by 0,983 so the
+   maximum breadth comes out at the stated figure.
+      fit: '1941' is the sheet's own fit — four 15.5 cm triples, six twin
+      12.7 cm, eight triple 25 mm.  '1945' is the ship that sailed for Okinawa:
+      the beam 15.5 cm turrets landed in 1943 and the light AA multiplied. */
+function yamato(fit) {
+  fit = fit || '1945';
   const L = 263.0, B = 38.9;
-  /* Stations from a general arrangement: a nearly plumb stem over a bulbous
-     forefoot, maximum breadth held from a third to two thirds of the length,
-     and a rounded cruiser stern narrow enough to leave the quarterdeck clear
-     for the aircraft. */
+  /* Half-breadths traced off the plan every 5 m and scaled. The correction
+     that matters: she carries her full beam from 130 m all the way aft to
+     210 m, and the bow is far finer than it looks — 11 m of breadth at 50 m
+     from the stem, not 16. */
   const H = hullMaker([
-    [0, 0], [3.5, 1.5], [9, 3.6], [16, 6.4], [25, 9.6], [36, 12.8], [48, 15.5],
-    [62, 17.6], [78, 18.9], [95, 19.4], [115, 19.45], [135, 19.45], [152, 19.3],
-    [170, 18.7], [186, 17.7], [200, 16.4], [214, 14.5], [227, 12.2], [239, 9.4],
-    [249, 6.5], [256.5, 3.8], [261, 1.7], [263, 0],
+    [0, 0], [4, 1.4], [10, 3.2], [18, 5.9], [26, 7.3], [34, 8.6], [42, 9.9],
+    [50, 11.1], [58, 12.5], [66, 13.9], [74, 15.2], [82, 16.1], [90, 17.0],
+    [98, 17.7], [106, 18.2], [114, 18.7], [124, 19.1], [136, 19.35],
+    [150, 19.42], [170, 19.45], [190, 19.45], [204, 19.3], [214, 18.9],
+    [220, 17.0], [228, 16.6], [236, 15.8], [243, 14.2], [249, 10.8],
+    [254, 7.9], [258, 5.4], [261, 2.8], [263, 0],
   ]);
   const edge = x => H.halfAt(x);
-  /* Stations, bow to stern: turrets 1 and 2 superfiring, the surviving forward
-     15.5 cm over turret 2, the pagoda, the single funnel, the mainmast, the
-     after command post, the after 15.5 cm, turret 3, and then 60 m of
-     quarterdeck given over entirely to aircraft. */
-  const T = { n1: 61, n2: 84, sf: 100, br: 116, fn: 140, mm: 157, ap: 169, sa: 182, n3: 200 };
+  /* Stations read off the sheet. The whole forward group sat some 18 m too far
+     forward before this: turret 1 is at 81 m, not 61, and her guns trained
+     ahead reach only to 59 m from the stem. */
+  const T = { n1: 81, n2: 102, sf: 118, br: 133, fn: 153, mm: 165, ap: 173, sa: 181, n3: 198, wing: 148 };
+  const QD = 219;                                     // where the deck steps down to the quarterdeck
 
   /* --- deck --- */
   const conves = [];
   conves.push(el('path', { class: 'conves', d: H.inset(0.55) }));
-  conves.push(el('rect', { class: 'conves-aco', x: T.br - 16, y: -15, width: 74, height: 30, rx: 3 }));   // the steel amidships deck
+  conves.push(el('rect', { class: 'conves-aco', x: T.sf + 2, y: -12.5, width: 70, height: 25, rx: 3 }));   // the steel amidships deck
   {                                                       // the quarterdeck, cut to the deck edge so it cannot run outside the hull
     const qs = [];
-    for (let x = L - 44; x <= L - 5; x += 3) qs.push([x, -(edge(x) - 1.1)]);
-    for (let x = L - 5; x >= L - 44; x -= 3) qs.push([x, edge(x) - 1.1]);
+    for (let x = QD; x <= L - 5; x += 3) qs.push([x, -(edge(x) - 1.1)]);
+    for (let x = L - 5; x >= QD; x -= 3) qs.push([x, edge(x) - 1.1]);
     conves.push(el('path', { class: 'conves-aco', d: smooth(qs, true) }));
   }
   conves.push(el('path', { class: 'borda-conves', d: H.inset(0.55) }));
@@ -447,28 +467,34 @@ function yamato() {
   const proa = [];
   proa.push(el('path', { class: 'kikumon', d: `M2.2 0m-1.6 0a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0 -3.2 0` }));
   for (const s of [-1, 1]) {
-    proa.push(el('path', { class: 'corrente', d: `M${f(6.5)} ${f(s * 2.4)}Q${f(22)} ${f(s * 5.2)} ${f(40)} ${f(s * 4.1)}` }));
-    proa.push(el('rect', { class: 'ancora', x: 5.0, y: s * 2.4 - 1.0, width: 3.0, height: 2.0, rx: 0.4 }));
-    proa.push(el('circle', { class: 'ventilador', cx: 41, cy: s * 4.1, r: 1.5 }));      // windlass
-    for (let i = 0; i < 5; i++) proa.push(bollard(14 + i * 6, s * (edge(14 + i * 6) - 1.6)));
+    proa.push(el('path', { class: 'corrente', d: `M${f(7)} ${f(s * 1.9)}Q${f(20)} ${f(s * 4.0)} ${f(34)} ${f(s * 3.6)}` }));
+    proa.push(el('rect', { class: 'ancora', x: 5.4, y: s * 1.9 - 1.0, width: 3.0, height: 2.0, rx: 0.4 }));
+    proa.push(el('circle', { class: 'ventilador', cx: 35, cy: s * 3.6, r: 1.5 }));      // windlass
+    for (let i = 0; i < 7; i++) proa.push(bollard(14 + i * 7, s * (edge(14 + i * 7) - 1.4)));
   }
-  proa.push(breakwater(T.n1 - 26, edge));
-  for (let i = 0; i < 8; i++) { const x = 20 + i * 4.5; proa.push(vent(x, 0, 0.7)); }
-  proa.push(hatch(48, 0, 2.6, 3.4));
+  proa.push(breakwater(T.n1 - 15, edge));
+  for (let i = 0; i < 9; i++) { const x = 22 + i * 4.6; proa.push(vent(x, 0, 0.7)); }
+  proa.push(hatch(66, 0, 2.6, 3.4));
 
   /* --- main battery: three triple 46 cm. 45 calibres makes a 20.7 m gun, of
      which 15.5 m stands out ahead of the face. --- */
-  const G46 = { faceW: 12.6, midW: 15.2, rearW: 13.2, fwd: 7.0, aft_: 14.0, barbette: 13.3, guns: 3, spacing: 3.05, cal: 46, barrelProj: 15.5, rf: 15.0, rfBack: 3.2 };
+  /* The gun house measures 16 m on the plan, with the barbette centre 6 m back
+     from the face, and the guns stand 15,8 m proud of it. That puts turret 1's
+     muzzles at 59 m from the stem, which is exactly where the sheet has them. */
+  const G46 = { faceW: 12.6, midW: 15.2, rearW: 13.2, fwd: 6.0, aft_: 10.5, barbette: 13.3, guns: 3, spacing: 3.05, cal: 46, barrelProj: 15.8, rf: 15.0, rfBack: 2.8 };
   const torres = [
     mainTurret(Object.assign({ id: 'torre-1', x: T.n1 }, G46)),
     mainTurret(Object.assign({ id: 'torre-2', x: T.n2 }, G46)),
     mainTurret(Object.assign({ id: 'torre-3', x: T.n3, aft: true }, G46)),
   ];
-  /* the two 15.5 cm triples that survived: one superfiring forward, one aft.
-     The beam pair went ashore in 1943 to make room for more AA. */
+  /* One 15.5 cm triple superfiring forward and one aft. In 1941 there were two
+     more on the beam, abreast the funnel; they went ashore in 1943 so their
+     barbettes could carry 12.7 cm and 25 mm instead. */
   const S155 = { len: 9.2, w: 7.6, barbette: 6.6, guns: 3, spacing: 1.55, cal: 15.5, barrelProj: 7.2 };
   torres.push(secTurret(Object.assign({ id: 'sec-proa', x: T.sf }, S155)));
   torres.push(secTurret(Object.assign({ id: 'sec-popa', x: T.sa, aft: true }, S155)));
+  if (fit === '1941') for (const s of [-1, 1])
+    torres.push(secTurret(Object.assign({ id: 'sec-asa' + (s < 0 ? 'b' : 'e'), x: T.wing, y: s * 11.5, rot: s * 90 }, S155)));
 
   /* --- the pagoda: the tower seen from above is a stack of shrinking rings --- */
   const sup = [];
@@ -497,24 +523,29 @@ function yamato() {
   // boat deck: the cutters and launches amidships, and the two big derricks
   const deck = [];
   for (const s of [-1, 1]) {
-    deck.push(crane(T.mm + 13, s * 10.5, { len: 13, angle: 58 }));
-    for (let i = 0; i < 4; i++) deck.push(boat(T.fn + 12 + i * 9.5, s * 13.0, 0, 8.5 + (i % 2) * 2.5, 2.4));
-    deck.push(boat(T.fn - 12, s * 13.6, 0, 11, 2.8));
+    deck.push(crane(T.mm + 9, s * 10.5, { len: 13, angle: 58 }));
+    for (let i = 0; i < 4; i++) deck.push(boat(T.fn + 9 + i * 8.5, s * 13.4, 0, 8.5 + (i % 2) * 2.5, 2.4));
+    deck.push(boat(T.fn - 11, s * 14.0, 0, 11, 2.8));
   }
 
   /* --- 1945 anti-aircraft: twelve twin 12.7 cm and fifty-two triple 25 mm.
      The twins ride the superstructure deck edge, the 25s fill every flat
      surface that was left, which is exactly what happened in refit. --- */
   const aa = [];
-  const dpX = [104, 118, 132, 146, 160, 174];
-  for (const x of dpX) for (const s of [-1, 1]) aa.push(twinDP(x, s * 14.2, s > 0 ? 90 : -90, 12.7));
+  const dpX = fit === '1941' ? [137, 151, 165] : [124, 136, 148, 160, 172, 184];
+  for (const x of dpX) for (const s of [-1, 1]) aa.push(twinDP(x, s * (edge(x) - 5.0), s > 0 ? 90 : -90, 12.7));
   const aaSpots = [];
-  for (const x of [48, 53, 70, 76, 92, 97]) for (const s of [-1, 1]) aaSpots.push([x, s * (edge(x) - 3.0)]);      // forecastle, around turrets 1 and 2
-  for (let i = 0; i < 11; i++) { const x = 100 + i * 7.4; for (const s of [-1, 1]) aaSpots.push([x, s * 18.2]); }   // the long sponson rows
-  for (const x of [110, 124, 138, 152, 166]) for (const s of [-1, 1]) aaSpots.push([x, s * 10.4]);                  // inboard of the boat deck
-  for (const x of [190, 196, 210, 216]) for (const s of [-1, 1]) aaSpots.push([x, s * (edge(x) - 3.2)]);            // abreast turret 3
-  for (const x of [T.br - 11, T.br + 13]) for (const s of [-1, 1]) aaSpots.push([x, s * 12.5]);
-  aaSpots.push([T.n2 + 17, 0], [T.n3 - 17, 0]);
+  if (fit === '1941') {                               // eight triple 25 mm, all of them grouped about the funnel
+    for (const x of [143, 159]) for (const s of [-1, 1]) aaSpots.push([x, s * 7.6]);
+    for (const x of [128, 172]) for (const s of [-1, 1]) aaSpots.push([x, s * 9.2]);
+  } else {
+    for (const x of [68, 74, 90, 96, 112, 118]) for (const s of [-1, 1]) aaSpots.push([x, s * (edge(x) - 3.0)]);  // forecastle, around turrets 1 and 2
+    for (let i = 0; i < 11; i++) { const x = 120 + i * 7.4; for (const s of [-1, 1]) aaSpots.push([x, s * (edge(x) - 1.6)]); }   // the long sponson rows
+    for (const x of [128, 142, 156, 170, 184]) for (const s of [-1, 1]) aaSpots.push([x, s * 10.4]);              // inboard of the boat deck
+    for (const x of [192, 206, 212]) for (const s of [-1, 1]) aaSpots.push([x, s * (edge(x) - 3.2)]);             // abreast turret 3
+    for (const x of [T.br - 11, T.br + 13]) for (const s of [-1, 1]) aaSpots.push([x, s * 12.5]);
+    aaSpots.push([T.n2 + 8, 0], [T.n1 - 12, 0]);
+  }
   for (const p of aaSpots) aa.push(aa25(p[0], p[1], p[1] < 0 ? -90 : p[1] > 0 ? 90 : 0));
 
   /* --- aviation: the quarterdeck. Two 19 m catapults trained outboard, the
@@ -524,28 +555,28 @@ function yamato() {
      starts there and not a metre further forward. */
   const av = [];
   for (const s of [-1, 1]) {
-    av.push(catapult(L - 23, s * 9.0, s * 12, 19.2));
+    av.push(catapult(243, s * 9.0, s * 12, 19.2));
     // the handling rails the trolleys ran on, from the hangar lift out to each catapult
     for (const off of [-0.55, 0.55]) av.push(el('path', {
       class: 'trilho', fill: 'none',
-      d: `M${f(L - 37)} ${f(s * 2.6 + off)}Q${f(L - 30)} ${f(s * 7.4 + off)} ${f(L - 17)} ${f(s * 8.6 + off)}`,
+      d: `M${f(226)} ${f(s * 2.6 + off)}Q${f(234)} ${f(s * 7.4 + off)} ${f(249)} ${f(s * 8.6 + off)}`,
     }));
   }
-  av.push(crane(L - 9, 0, { len: 11, angle: 152 }));
-  av.push(el('circle', { class: 'escotilha', cx: L - 34, cy: 0, r: 2.4 }));          // the lift to the hangar
-  av.push(floatplane(L - 33, -6.6, 16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
-  av.push(floatplane(L - 33, 6.6, -16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
+  av.push(crane(251, 0, { len: 11, angle: 152 }));
+  av.push(el('circle', { class: 'escotilha', cx: 226, cy: 0, r: 2.4 }));          // the lift to the hangar
+  av.push(floatplane(232, -6.6, 16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
+  av.push(floatplane(232, 6.6, -16, { span: 14.5, len: 11.3, twinFloat: true, mark: 'hinomaru' }));
   for (const s of [-1, 1]) { av.push(bollard(L - 8, s * 2.6)); av.push(bollard(L - 4.5, s * 1.8)); }
   av.push(el('rect', { class: 'ancora', x: L - 7.5, y: -1.0, width: 2.6, height: 2.0, rx: 0.4 }));
 
   /* --- odds and ends that sell the scale: vents, hatches, life rafts --- */
   const misc = [];
   for (const s of [-1, 1]) {
-    misc.push(raftRow(96, 188, s * 16.4, 13));
-    for (let i = 0; i < 9; i++) misc.push(vent(104 + i * 8, s * 6.4, 0.75));
-    for (let i = 0; i < 4; i++) misc.push(hatch(150 + i * 11, s * 3.2, 1.8, 2.4));
+    misc.push(raftRow(116, 206, s * 17.2, 13));
+    for (let i = 0; i < 9; i++) misc.push(vent(124 + i * 8, s * 6.4, 0.75));
+    for (let i = 0; i < 4; i++) misc.push(hatch(170 + i * 10, s * 3.2, 1.8, 2.4));
   }
-  return { id: 'yamato', L, B, H, layers: { conves, proa, torres, sup, deck, aa, av, misc } };
+  return { id: fit === '1941' ? 'yamato-1941' : 'yamato', L, B, H, layers: { conves, proa, torres, sup, deck, aa, av, misc } };
 }
 
 function iowa() {
@@ -676,7 +707,7 @@ function shipGroup(s, showLegend) {
 function svgFor(s) {
   const M = MARGIN, w = s.L + 2 * M, h = s.B + 2 * M;
   const defs = el('defs', {}, [
-    el('style', {}, `svg{${PALETTE[s.id]}}` + CSS),
+    el('style', {}, `svg{${PALETTE[s.id] || PALETTE[s.id.split('-')[0]]}}` + CSS),
     PLANKS,
     el('filter', { id: 'relevo', x: '-20%', y: '-40%', width: '140%', height: '180%' },
       el('feDropShadow', { dx: 0.5, dy: 0.7, stdDeviation: 0.35, 'flood-color': 'var(--sombra)', 'flood-opacity': 0.85 })),
@@ -730,11 +761,12 @@ function comparison(a, b) {
 }
 
 /* -------------------------------------------------------------------- run */
-const Y = yamato(), I = iowa();
+const Y = yamato('1945'), Y41 = yamato('1941'), I = iowa();
 fs.writeFileSync(path.join(ROOT, 'yamato.svg'), svgFor(Y));
+fs.writeFileSync(path.join(ROOT, 'yamato-1941.svg'), svgFor(Y41));
 fs.writeFileSync(path.join(ROOT, 'iowa.svg'), svgFor(I));
 fs.writeFileSync(path.join(ROOT, 'comparacao.svg'), comparison(Y, I));
-for (const n of ['yamato.svg', 'iowa.svg', 'comparacao.svg']) {
+for (const n of ['yamato.svg', 'yamato-1941.svg', 'iowa.svg', 'comparacao.svg']) {
   const p = path.join(ROOT, n);
   console.log(`  ${n.padEnd(16)} ${(fs.statSync(p).size / 1024).toFixed(0)} KB`);
 }

@@ -5,21 +5,29 @@ para servir de referência e de gabarito.
 
 ```
 node design/ships.mjs
-    -> design/yamato.svg       3.822 × 685 px   (263,0 × 38,9 m a 14 px/m)
-    -> design/iowa.svg         3.926 × 602 px   (270,4 × 33,0 m a 14 px/m)
-    -> design/comparacao.svg   2.984 × 1.160 px (os dois na mesma escala, com régua)
+    -> design/yamato.svg       3.822 × 685 px   Yamato em abril de 1945 (Ten-Go)
+    -> design/yamato-1941.svg  3.822 × 685 px   Yamato como completado, o porte da planta
+    -> design/iowa.svg         3.926 × 602 px   270,4 × 33,0 m a 14 px/m
+    -> design/comparacao.svg   2.984 × 1.160 px (Yamato e Iowa na mesma escala, com régua)
 ```
+
+`yamato('1941')` e `yamato('1945')` são o mesmo casco e as mesmas estações com
+armamento diferente: em 1941 são quatro torres de 15,5 cm (duas delas nas asas,
+abreadas com a chaminé), seis reparos duplos de 12,7 cm e oito triplos de
+25 mm; em 1945 as torres das asas já foram para terra, os duplos de 12,7 cm
+dobraram para doze e os 25 mm cobrem tudo que sobrou de superfície plana.
 
 Não são desenhos: são **geometria**. Tudo está em metros, proa em x = 0, linha
 de centro em y = 0, popa em x = LOA. Um reparo não fica onde parece bonito —
 fica na caverna em que ele ficava, e o cano que sai dele tem 20,7 m porque um
 46 cm/45 tem 20,7 m.
 
-Isso não é preciosismo: é o que impede erro. O convés de aviação do Yamato
-começa em 224,5 m **porque é ali que os canos da torre 3 terminam** quando ela
-aponta para a popa (200 de barbeta + 7 de face + 15,5 de cano). Os hidroaviões
-estavam em 223 na primeira versão e ficaram enfiados dentro dos canhões. O
-número diz onde é que dá.
+Isso não é preciosismo: é o que impede erro. O tombadilho do Yamato começa em
+219,8 m **porque é ali que os canos da torre 3 terminam** quando ela aponta
+para a popa (198 de barbeta + 6 de face + 15,8 de cano) — e a planta mostra o
+convés quebrando exatamente nesse ponto. Os hidroaviões estavam avante disso na
+primeira versão e ficaram enfiados dentro dos canhões. O número diz onde é que
+dá.
 
 ---
 
@@ -38,14 +46,13 @@ número diz onde é que dá.
 | espaçamento entre canos | 3,05 m | 2,97 m |
 | diâmetro da barbeta | 13,3 m | 11,6 m |
 | telêmetro da torre | 15,0 m | 13,7 m (torres 2 e 3) |
-| secundária | 2 × 3 de 15,5 cm + 12 × 2 de 12,7 cm | 10 × 2 de 12,7 cm |
-| antiaérea leve | ~52 triplos de 25 mm | 20 quádruplos de 40 mm + ~49 de 20 mm |
+| secundária (1945) | 2 × 3 de 15,5 cm + 12 × 2 de 12,7 cm | 10 × 2 de 12,7 cm |
+| secundária (1941) | 4 × 3 de 15,5 cm + 6 × 2 de 12,7 cm | — |
+| antiaérea leve | ~52 triplos de 25 mm (8 em 1941) | 20 quádruplos de 40 mm + ~49 de 20 mm |
 | aviação | 7 hidros, 2 catapultas | 3 hidros, 2 catapultas |
 | chaminés | **1** (com favo de mel na boca) | **2** |
 
-O porte desenhado é **abril de 1945** nos dois: o Yamato como saiu para Okinawa
-na Ten-Gō (as torres de 15,5 cm das asas já tinham ido embora em 1943 para dar
-lugar a mais antiaérea), a Iowa como andava ao largo do Japão.
+O Yamato sai nos dois portes; a Iowa, como andava ao largo do Japão em 1945.
 
 A Iowa é sete metros mais comprida e o Yamato é o navio maior. A boca da Iowa
 foi decidida pelas eclusas do Panamá, que têm 33,53 m; a do Yamato, por nada —
@@ -58,49 +65,60 @@ partir de 1943. Por isso um convés é quente e o outro é azul.
 
 ---
 
-## De onde vêm os números — e o que conferir primeiro
+## De onde vêm os números
 
-**Não usei imagem de referência.** Não abri planta, foto nem desenho: os
-números saíram do que eu sei sobre os dois navios. Isso muda o que dá para
-confiar em cada coisa, e vale separar em três níveis.
+**O Yamato foi medido em cima de uma planta.** A folha é a
+[NH 111711](https://commons.wikimedia.org/wiki/File:Builders_plans_for_the_Japanese_battleship_Yamato_(NH_111711).png)
+do Naval History & Heritage Command — domínio público nos EUA e no Japão — uma
+prancha japonesa (第18図 戦艦大和の外見見取図, "esboço do aspecto externo do
+encouraçado Yamato") que traz **perfil e planta** na mesma escala mais a tabela
+de características. É o porte como completado, em 1941.
 
-**Nível 1 — medidas consagradas.** Eslora, boca, calado, deslocamento,
-velocidade, guarnição, calibre, número de canos, comprimento e espaçamento dos
-canos, diâmetro da barbeta, base do telêmetro. São dados publicados e batidos;
-se algum estiver errado é erro de digitação, não de julgamento.
+Como foi medido:
 
-**Nível 2 — o porte de 1945.** Quantas peças de cada tipo, e quando as torres
-de 15,5 cm das asas do Yamato saíram. Bem estabelecido, mas as contagens de
-antiaérea variam de fonte para fonte (o Yamato aparece com 98, 113, 150 e 162
-canos de 25 mm dependendo de quem conta e de quando).
+1. Achei a banda horizontal da planta contando pixels escuros por linha.
+2. A corrida contínua de tinta dá o casco: **4.584 px para 263 m = 17,43 px/m**.
+3. Conferi a escala pelo outro eixo: a boca mede 689 px, que a 17,43 px/m dá
+   39,5 m contra os 38,9 m declarados — 1,5% a mais, que é a espessura do
+   traço. Todas as meias-bocas saíram escaladas por 0,983.
+4. Tracei o contorno (primeiro pixel escuro de cima e de baixo, com filtro de
+   mediana para descartar rótulo encostado) e amostrei a meia-boca de 5 em 5 m.
+5. O perfil está na mesma escala e alinhado com a planta (17,49 px/m, proas a
+   12 px uma da outra), então chaminé e mastro — ilegíveis na planta, que é
+   densa demais ali — foram lidos no perfil.
 
-**Nível 3 — as estações, e é aqui que mora o risco.** O objeto `T` de cada
-navio — a que distância da proa fica cada torre, o pagode, a chaminé, o mastro
-— é **estimativa minha a partir da proporção geral**, não medição. O mesmo vale
-para a tabela de cavernas que dá a forma do casco. É a primeira coisa a
-conferir contra uma planta de verdade:
+**O que mudou.** O grupo de vante inteiro estava uns 18 m avante demais:
 
-| | Yamato | Iowa |
-|---|---|---|
-| torre 1 | 61 m | 66 m |
-| torre 2 | 84 m | 87 m |
-| 15,5 cm de proa | 100 m | — |
-| pagode / ilha | 116 m | 114 m |
-| chaminé (1ª) | 140 m | 130 m |
-| chaminé (2ª) | — | 156 m |
-| mastro principal | 157 m | 172 m |
-| posto de comando de ré | 169 m | 188 m |
-| 15,5 cm de popa | 182 m | — |
-| torre 3 | 200 m | 206 m |
+| | antes | medido | Δ |
+|---|---|---|---|
+| torre 1 | 61 m | **81 m** | +20 |
+| torre 2 | 84 m | **102 m** | +18 |
+| 15,5 cm de vante | 100 m | **118 m** | +18 |
+| pagode | 116 m | **133 m** | +17 |
+| chaminé | 140 m | **153 m** | +13 |
+| mastro principal | 157 m | **165 m** | +8 |
+| 15,5 cm de ré | 182 m | **181 m** | −1 |
+| torre 3 | 200 m | **198 m** | −2 |
+| catapultas | 240 m | **243 m** | +3 |
+| quebra do convés | — | **219 m** | novo |
 
-Corrigir qualquer uma dessas linhas é editar um número; o navio se remonta
-sozinho em volta dela.
+A metade de ré já estava certa; o erro era todo à frente do pagode. E o casco
+mudou mais ainda: ele carrega a **boca cheia de 130 até 210 m** (eu afinava a
+partir de 135) e a proa é muito mais fina do que parece — **11 m de meia-boca
+aos 50 m do talha-mar**, onde eu tinha 16.
 
-O que **não** é estimativa, e serve de trava: a torre 3 do Yamato em 200 m com
-7 m de face e 15,5 m de cano põe a boca dos canhões em 224,5 m, e o convés de
-aviação começa exatamente ali. Se você mover a torre 3, o convés tem que andar
-junto — é o tipo de coisa que o gerador deixa evidente e uma ilustração à mão
-esconde.
+A casamata das torres também encolheu: a planta dá 16 m de comprimento com o
+centro da barbeta 6 m atrás da face, e não os 21 m que eu tinha suposto.
+
+**A Iowa continua por medir.** As estações dela ainda são estimativa pela
+proporção geral, mesmo nível de confiança que o Yamato tinha antes desta
+passagem. Os *Booklets of General Plans* da US Navy estão em domínio público e
+resolveriam do mesmo jeito.
+
+**Trava útil, independente de qualquer planta:** a torre 3 do Yamato em 198 m,
+com 6 m de face e 15,8 m de cano, põe a boca dos canhões em 219,8 m — e é
+exatamente ali que a planta mostra o convés quebrar para o tombadilho. Se você
+mover a torre 3, o convés tem que andar junto.
 
 ---
 
@@ -129,11 +147,13 @@ Cada navio é uma função que devolve `{ id, L, B, H, layers }`. Tem três part
 ### 1. A tabela de cavernas — a forma do casco
 
 ```js
-const H = hullMaker([
-  [0, 0], [3.5, 1.5], [9, 3.6], [16, 6.4], [25, 9.6], [36, 12.8], [48, 15.5],
-  [62, 17.6], [78, 18.9], [95, 19.4], [115, 19.45], [135, 19.45], [152, 19.3],
-  [170, 18.7], [186, 17.7], [200, 16.4], [214, 14.5], [227, 12.2], [239, 9.4],
-  [249, 6.5], [256.5, 3.8], [261, 1.7], [263, 0],
+const H = hullMaker([          // Yamato, traçada da planta de 5 em 5 m
+  [0, 0], [4, 1.4], [10, 3.2], [18, 5.9], [26, 7.3], [34, 8.6], [42, 9.9],
+  [50, 11.1], [58, 12.5], [66, 13.9], [74, 15.2], [82, 16.1], [90, 17.0],
+  [98, 17.7], [106, 18.2], [114, 18.7], [124, 19.1], [136, 19.35],
+  [150, 19.42], [170, 19.45], [190, 19.45], [204, 19.3], [214, 18.9],
+  [220, 17.0], [228, 16.6], [236, 15.8], [243, 14.2], [249, 10.8],
+  [254, 7.9], [258, 5.4], [261, 2.8], [263, 0],
 ]);
 ```
 
@@ -150,15 +170,16 @@ que isso e o casco vira polígono.
 | `H.inset(d)` | o mesmo contorno puxado `d` metros para dentro (borda do convés) |
 | `H.L`, `H.B` | eslora e boca, deduzidas da tabela |
 
-A diferença entre os dois cascos é toda aqui: a proa da Iowa sai de 0 e só
-chega a 13,6 m de meia-boca lá pelos 102 m, enquanto a do Yamato já tem 15,5 m
-aos 48 m. É por isso que uma parece uma lâmina e a outra um charuto.
+A diferença entre os dois cascos é toda aqui: a proa da Iowa só chega a 13,6 m
+de meia-boca lá pelos 102 m; a do Yamato chega a 15,2 m aos 74 m e depois
+segura a boca cheia por oitenta metros. É por isso que uma parece uma lâmina e
+a outra um charuto.
 
 ### 2. As estações — onde fica cada coisa
 
 ```js
-const T = { n1: 61, n2: 84, sf: 100, br: 116, fn: 140, mm: 157, ap: 169, sa: 182, n3: 200 };
-//          torre 1   torre 2   15,5 cm   pagode   chaminé  mastro  posto  15,5 cm  torre 3
+const T = { n1: 81, n2: 102, sf: 118, br: 133, fn: 153, mm: 165, ap: 173, sa: 181, n3: 198, wing: 148 };
+//          torre 1   torre 2   15,5 cm  pagode  chaminé  mastro  posto  15,5 cm  torre 3  asas
 ```
 
 Um objeto e nada mais. Mexer numa estação move a peça e tudo que foi
@@ -213,9 +234,9 @@ sprite, mas é aí que se põe a torre apontando para o inimigo.
 As duas fichas prontas:
 
 ```js
-const G46 = { faceW: 12.6, midW: 15.2, rearW: 13.2, fwd: 7.0, aft_: 14.0,
+const G46 = { faceW: 12.6, midW: 15.2, rearW: 13.2, fwd: 6.0, aft_: 10.5,
               barbette: 13.3, guns: 3, spacing: 3.05, cal: 46,
-              barrelProj: 15.5, rf: 15.0, rfBack: 3.2 };     // Yamato
+              barrelProj: 15.8, rf: 15.0, rfBack: 2.8 };     // Yamato, da planta
 const G16 = { faceW: 12.2, midW: 13.1, rearW: 11.8, fwd: 6.2, aft_: 12.1,
               barbette: 11.6, guns: 3, spacing: 2.97, cal: 40.6,
               barrelProj: 15.0, rfBack: 2.6 };               // Iowa

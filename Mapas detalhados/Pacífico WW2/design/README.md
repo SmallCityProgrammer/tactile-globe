@@ -58,6 +58,52 @@ partir de 1943. Por isso um convés é quente e o outro é azul.
 
 ---
 
+## De onde vêm os números — e o que conferir primeiro
+
+**Não usei imagem de referência.** Não abri planta, foto nem desenho: os
+números saíram do que eu sei sobre os dois navios. Isso muda o que dá para
+confiar em cada coisa, e vale separar em três níveis.
+
+**Nível 1 — medidas consagradas.** Eslora, boca, calado, deslocamento,
+velocidade, guarnição, calibre, número de canos, comprimento e espaçamento dos
+canos, diâmetro da barbeta, base do telêmetro. São dados publicados e batidos;
+se algum estiver errado é erro de digitação, não de julgamento.
+
+**Nível 2 — o porte de 1945.** Quantas peças de cada tipo, e quando as torres
+de 15,5 cm das asas do Yamato saíram. Bem estabelecido, mas as contagens de
+antiaérea variam de fonte para fonte (o Yamato aparece com 98, 113, 150 e 162
+canos de 25 mm dependendo de quem conta e de quando).
+
+**Nível 3 — as estações, e é aqui que mora o risco.** O objeto `T` de cada
+navio — a que distância da proa fica cada torre, o pagode, a chaminé, o mastro
+— é **estimativa minha a partir da proporção geral**, não medição. O mesmo vale
+para a tabela de cavernas que dá a forma do casco. É a primeira coisa a
+conferir contra uma planta de verdade:
+
+| | Yamato | Iowa |
+|---|---|---|
+| torre 1 | 61 m | 66 m |
+| torre 2 | 84 m | 87 m |
+| 15,5 cm de proa | 100 m | — |
+| pagode / ilha | 116 m | 114 m |
+| chaminé (1ª) | 140 m | 130 m |
+| chaminé (2ª) | — | 156 m |
+| mastro principal | 157 m | 172 m |
+| posto de comando de ré | 169 m | 188 m |
+| 15,5 cm de popa | 182 m | — |
+| torre 3 | 200 m | 206 m |
+
+Corrigir qualquer uma dessas linhas é editar um número; o navio se remonta
+sozinho em volta dela.
+
+O que **não** é estimativa, e serve de trava: a torre 3 do Yamato em 200 m com
+7 m de face e 15,5 m de cano põe a boca dos canhões em 224,5 m, e o convés de
+aviação começa exatamente ali. Se você mover a torre 3, o convés tem que andar
+junto — é o tipo de coisa que o gerador deixa evidente e uma ilustração à mão
+esconde.
+
+---
+
 ## O sistema de coordenadas
 
 ```

@@ -1,0 +1,1948 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>太平洋戦争 — o Pacífico, 1941–1945</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1a24; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #e8dfc8; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: grab; touch-action: none; }
+  canvas.drag { cursor: grabbing; }
+  body.sheet #c { cursor: default; }
+  .card { position: fixed; background: rgba(16, 32, 44, 0.9); border: 1px solid #4d6a80; box-shadow: 0 1px 0 rgba(255,255,255,0.07) inset, 0 3px 12px rgba(0, 0, 0, 0.45); border-radius: 3px; padding: 8px 12px; font-size: 12px; line-height: 1.45; pointer-events: none; }
+  #title { left: 16px; top: 16px; pointer-events: auto; max-width: 330px; }
+  #title h1 { margin: 0 0 2px; font-size: 19px; font-weight: normal; letter-spacing: 0.5px; }
+  #title h1 span { font-family: 'Yu Mincho', 'MS Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif; }
+  #title .sub { font-style: italic; color: #9db6c6; margin-bottom: 6px; }
+  #legend { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 12px; font-size: 11.5px; }
+  #legend i { display: inline-block; width: 11px; height: 11px; border: 1px solid #8ea7b8; margin-right: 5px; vertical-align: -1px; }
+  #tools { margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap; }
+  select, button { font: 11.5px Georgia, serif; background: #1c3547; border: 1px solid #58788e; border-radius: 2px; color: #e8dfc8; padding: 2px 5px; cursor: pointer; }
+  button.on { background: #40627c; }
+  button:hover { border-color: #9db6c6; }
+  #when { margin-top: 7px; pointer-events: auto; }
+  #when .row { display: flex; align-items: center; gap: 6px; }
+  #when b { font-weight: normal; font-variant-numeric: tabular-nums; min-width: 92px; }
+  input[type=range] { flex: 1; accent-color: #d8b25e; height: 14px; }
+  #hud { right: 16px; bottom: 16px; text-align: right; font-variant-numeric: tabular-nums; }
+  #hud .bar { display: inline-block; height: 5px; border: 1px solid #e8dfc8; border-top: none; margin-bottom: 3px; }
+  #hint { left: 16px; bottom: 16px; font-style: italic; color: #9db6c6; max-width: 420px; }
+  #info { right: 16px; top: 16px; max-width: 300px; display: none; }
+  #info h3 { margin: 0 0 3px; font-size: 13px; font-weight: normal; }
+  #info .ja { font-family: 'Yu Mincho', 'MS Mincho', 'Hiragino Mincho ProN', serif; color: #9db6c6; }
+  #info .t { color: #cfc2a2; font-style: italic; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-style: italic; background: #0d1a24; }
+
+  /* --- the asset sheet: every drawable thing on the map, and a drop target for each --- */
+  #sheet { position: absolute; inset: 0; display: none; background: #0d1a24; overflow: auto; padding: 14px 18px 60px; }
+  body.sheet #sheet { display: block; }
+  body.sheet #c { display: none; }
+  #sheet h2 { font-size: 17px; font-weight: normal; margin: 0 0 3px; }
+  #sheet .lead { color: #9db6c6; font-style: italic; margin: 0 0 12px; font-size: 12.5px; max-width: 780px; line-height: 1.5; }
+  #sheet .bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  #sheet .grp { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #7f9bad; border-bottom: 1px solid #2b4456; margin: 18px 0 9px; padding-bottom: 3px; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 9px; }
+  .slot { border: 1px solid #2b4456; border-radius: 3px; background: #12222e; padding: 5px; text-align: center; position: relative; }
+  .slot.over { border-color: #d8b25e; background: #1d3446; }
+  .slot.mine { border-color: #6f9c5a; }
+  .slot canvas { display: block; width: 100%; height: 96px; background: repeating-conic-gradient(#1b2d3b 0 25%, #27404f 0 50%) 0 0 / 13px 13px; border-radius: 2px; cursor: pointer; }
+  .slot .nm { font-size: 11px; margin-top: 4px; line-height: 1.25; }
+  .slot .id { font-size: 9.5px; color: #7f9bad; font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  .slot .ops { position: absolute; right: 3px; top: 3px; display: none; gap: 3px; }
+  .slot:hover .ops { display: flex; }
+  .slot .ops button { font-size: 9.5px; padding: 1px 3px; }
+  #drop { position: fixed; inset: 0; background: rgba(13, 26, 36, 0.88); display: none; align-items: center; justify-content: center; font-size: 22px; border: 3px dashed #d8b25e; z-index: 9; pointer-events: none; }
+  body.dropping #drop { display: flex; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title" class="card">
+  <h1><span>太平洋戦争</span> · o Pacífico</h1>
+  <div class="sub">a guerra naval, 1941–1945 · carta ilustrada</div>
+  <div id="legend"></div>
+  <div id="when">
+    <div class="row"><b id="whenTxt">7 dez 1941</b><input type="range" id="whenR" min="0" max="1364" value="0"><button id="bPlay">▶</button></div>
+  </div>
+  <div id="tools">
+    <select id="goto"><option value="">ir para…</option></select>
+    <button id="bFront" class="on">frentes</button>
+    <button id="bTracks" class="on">rotas</button>
+    <button id="bBattles" class="on">batalhas</button>
+    <button id="bBases" class="on">bases</button>
+    <button id="bLabels" class="on">rótulos</button>
+    <button id="bGrid">grade</button>
+    <button id="bDepth" class="on">sondas</button>
+    <button id="bSheet">assets</button>
+    <button id="bSprites" class="on">imagem</button>
+  </div>
+</div>
+<div id="info" class="card"></div>
+<div id="hud" class="card"><div><span class="bar" id="bar"></span> <span id="barTxt"></span></div><div id="pos"></div><div id="band"></div></div>
+<div id="hint" class="card">scroll: zoom · arrastar: mover · duplo clique: aproximar · clique: identificar · teclas F R B N L G S I · A: assets · ←→: dias · Home: todo o teatro</div>
+<div id="sheet">
+  <h2>Assets do mapa</h2>
+  <p class="lead">Tudo o que a carta desenha está aqui, e tudo aceita uma imagem própria. Arraste um PNG para cima de um quadro
+  (ou solte vários de uma vez: cada arquivo vai para o slot de mesmo nome). Clique no quadro para baixar o desenho atual em PNG
+  e pintar por cima. As trocas ficam gravadas no navegador; <b>exportar</b> gera o <code>assets.json</code> que o
+  <code>tools/pack.mjs</code> embute no arquivo final.</p>
+  <div class="bar">
+    <button id="shImport">importar PNGs…</button>
+    <button id="shJson">importar assets.json…</button>
+    <button id="shExport">exportar assets.json</button>
+    <button id="shClear">restaurar tudo</button>
+    <button id="shBack">voltar ao mapa (Esc)</button>
+    <span id="shCount" style="color:#9db6c6;font-size:12px"></span>
+  </div>
+  <div id="grid"></div>
+</div>
+<div id="drop">solte os PNG — cada arquivo vai para o asset de mesmo nome</div>
+<div id="loading">desenhando o Pacífico…</div>
+<script type="application/json" id="pacific">__PACIFIC_JSON__</script>
+<script type="application/json" id="history">__HISTORY_JSON__</script>
+<script type="text/plain" id="fields">__FIELDS_B64__</script>
+<script type="application/json" id="sprites">__SPRITES_JSON__</script>
+<script>
+(function () {
+'use strict';
+
+/* ======================================================================
+   0. data, projection, hashing, noise
+   ====================================================================== */
+const P = JSON.parse(document.getElementById('pacific').textContent);
+const HI = JSON.parse(document.getElementById('history').textContent);
+const PR = P.proj, R_E = PR.R, LON0 = PR.LON0, D2R = Math.PI / 180;
+const TAU = Math.PI * 2;
+/* Mercator. A metre here is a true metre only on the equator, so anything that
+   must be a real distance (a ship's length, a gun's range, the scale bar) is
+   divided by cos(lat) at the spot where it is drawn. */
+const toXY = (lat, lon) => [R_E * (((lon % 360) + 360) % 360 - LON0) * D2R, -R_E * Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * D2R / 2))];
+const latOf = y => (2 * Math.atan(Math.exp(-y / R_E)) - Math.PI / 2) / D2R;
+const lonOf = x => x / (R_E * D2R) + LON0;
+const kAt = y => Math.cos(latOf(y) * D2R);          // true metres per Mercator metre
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+
+function h2(i, j, k) {                               // integer lattice hash -> [0,1)
+  let h = Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul(j | 0, 0x165667b1) ^ Math.imul((k | 0) + 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+function rng(seed) {                                 // mulberry32
+  let a = (seed * 4294967296) | 0;
+  return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function vnoise(x, y, k) {
+  const xi = Math.floor(x), yi = Math.floor(y); let fx = x - xi, fy = y - yi;
+  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+  const a = h2(xi, yi, k), b = h2(xi + 1, yi, k), c = h2(xi, yi + 1, k), d = h2(xi + 1, yi + 1, k);
+  return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+}
+function fbm(x, y, k, oct) {
+  let v = 0, amp = 0.5, sum = 0;
+  for (let o = 0; o < (oct || 3); o++) { v += amp * vnoise(x, y, k + o); sum += amp; x = x * 2.03 + 17.1; y = y * 1.97 + 9.7; amp *= 0.5; }
+  return v / sum;
+}
+
+/* the coast arrives delta-encoded in units of P.q metres */
+const COAST = P.coast.map(r => {
+  const n = r.p.length, a = new Float64Array(n);
+  let x = 0, y = 0;
+  for (let i = 0; i < n; i += 2) { x += r.p[i]; y += r.p[i + 1]; a[i] = x * P.q; a[i + 1] = y * P.q; }
+  let x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18, len = 0;
+  for (let i = 0; i < n; i += 2) {
+    if (a[i] < x0) x0 = a[i]; if (a[i] > x1) x1 = a[i];
+    if (a[i + 1] < y0) y0 = a[i + 1]; if (a[i + 1] > y1) y1 = a[i + 1];
+    if (i) len += Math.abs(a[i] - a[i - 2]) + Math.abs(a[i + 1] - a[i - 1]);
+  }
+  // the mean step along the ring, in metres: what decides how many of its
+  // points are worth projecting at a given scale
+  return { s: r.s, h: r.h, p: a, x0, y0, x1, y1, big: (x1 - x0) + (y1 - y0), seg: len / Math.max(1, n / 2 - 1) };
+});
+COAST.sort((a, b) => b.big - a.big);                 // continents first, atolls last
+
+/* ======================================================================
+   1. fields raster: depth, distance to land, land elevation
+   ====================================================================== */
+const FI = P.fields; let FD = null;
+/* isLand / depthM / landKm are almost always asked about the same point one
+   after the other, and the Mercator inverse in the middle costs a log, an atan
+   and an exp. So the last point's cell is kept — it turns three transcendental
+   round trips per sample into one. */
+let _lx = NaN, _ly = NaN, _i = 0, _tx = 0, _ty = 0;
+function fieldCell(x, y) {
+  if (x === _lx && y === _ly) return;
+  _lx = x; _ly = y;
+  let fx = (lonOf(x) - FI.lon0) * FI.deg - 0.5, fy = (FI.lat0 - latOf(y)) * FI.deg - 0.5;
+  fx = clamp(fx, 0, FI.w - 1.001); fy = clamp(fy, 0, FI.h - 1.001);
+  const xi = fx | 0, yi = fy | 0;
+  _tx = fx - xi; _ty = fy - yi; _i = (yi * FI.w + xi) * 4;
+}
+function fieldAt(x, y, ch) {
+  if (!FD) return 0;
+  fieldCell(x, y);
+  const i = _i + ch, r = FI.w * 4;
+  const a = FD[i], b = FD[i + 4], c = FD[i + r], d = FD[i + r + 4];
+  return (a + (b - a) * _tx) * (1 - _ty) + (c + (d - c) * _tx) * _ty;
+}
+const depthM = (x, y) => fieldAt(x, y, 0) * FI.depthStep;
+const landKm = (x, y) => fieldAt(x, y, 1) * FI.landStep;
+const elevM = (x, y) => fieldAt(x, y, 2) * FI.elevStep;
+const isLand = (x, y) => fieldAt(x, y, 2) > 0.5;
+
+/* ======================================================================
+   2. the palette, and the four chart styles
+   ====================================================================== */
+const STYLES = {
+  carta: { sea0: '#17415a', sea1: '#0a2231', land: '#d9cca8', landHi: '#efe2bd', shore: '#7fa3ba', ink: '#e8dfc8', paper: '#0d1a24', grid: 'rgba(160,190,210,0.20)', jp: '#d04030', us: '#4a86c8', al: '#5aa06a' },
+  papel:  { sea0: '#bcd2dc', sea1: '#7fa2b4', land: '#e7dbba', landHi: '#f3ead0', shore: '#5c7f96', ink: '#2b3a44', paper: '#e9e0c6', grid: 'rgba(60,90,110,0.22)', jp: '#b03024', us: '#2f5f95', al: '#3f7a4e' },
+  noite:  { sea0: '#0a1620', sea1: '#03080d', land: '#26313a', landHi: '#333f4a', shore: '#456173', ink: '#c6dbe6', paper: '#05090d', grid: 'rgba(120,160,185,0.16)', jp: '#e05a48', us: '#63a6e8', al: '#6fc084' },
+};
+let STY = 'carta', C = STYLES.carta;
+
+/* ======================================================================
+   3. THE ASSET TABLE
+   ----------------------------------------------------------------------
+   Every mark this map makes is declared here and drawn through glyph()/tile().
+   A slot's picture comes from, in order: a PNG the user dropped on it, a PNG
+   packed into the file at build time, and finally the code in DRAW. Because
+   nothing draws outside this table, everything on the chart can be repainted
+   by hand — which is the whole point of the sheet page.
+      id   the key: a dropped file called <id>.png lands here
+      pt   what the sheet calls it
+      g    which group of the sheet it appears in
+      k    'glyph' a stamp at a point · 'tile' a repeating texture · 'line' a stamp repeated along a path
+      m    the size it is drawn at, in true metres (a tile: the side of one repeat)
+      an   'center' or 'bottom' — where the anchor sits in the picture
+      rot  1 if the map rotates it (a ship to its course, a wave to the swell)
+   ====================================================================== */
+const ASSETS = [
+  // --- o mar ---
+  { id: 'mar', pt: 'água aberta', g: 'o mar', k: 'tile', m: 120000 },
+  { id: 'mar_raso', pt: 'água rasa (plataforma)', g: 'o mar', k: 'tile', m: 60000 },
+  { id: 'vaga', pt: 'vaga / ondulação', g: 'o mar', k: 'glyph', m: 900, rot: 1 },
+  { id: 'carneiro', pt: 'carneiro (crista branca)', g: 'o mar', k: 'glyph', m: 260, rot: 1 },
+  { id: 'rebentacao', pt: 'rebentação na costa', g: 'o mar', k: 'line', m: 700 },
+  { id: 'corrente', pt: 'corrente marinha', g: 'o mar', k: 'line', m: 40000 },
+  { id: 'isobata', pt: 'isóbata', g: 'o mar', k: 'line', m: 30000 },
+  { id: 'sonda', pt: 'sonda (número de profundidade)', g: 'o mar', k: 'glyph', m: 9000 },
+  // --- a terra ---
+  { id: 'praia', pt: 'praia', g: 'a terra', k: 'line', m: 1200 },
+  { id: 'recife', pt: 'recife de coral', g: 'a terra', k: 'tile', m: 2600 },
+  { id: 'selva', pt: 'selva', g: 'a terra', k: 'tile', m: 1800 },
+  { id: 'palmeira', pt: 'coqueiro', g: 'a terra', k: 'glyph', m: 14, rot: 1 },
+  { id: 'arvore', pt: 'árvore da mata', g: 'a terra', k: 'glyph', m: 22, rot: 1 },
+  { id: 'monte', pt: 'monte / serra', g: 'a terra', k: 'glyph', m: 9000, an: 'bottom' },
+  { id: 'vulcao', pt: 'vulcão', g: 'a terra', k: 'glyph', m: 11000, an: 'bottom' },
+  { id: 'pista', pt: 'pista de pouso', g: 'a terra', k: 'glyph', m: 1800, rot: 1 },
+  { id: 'vila', pt: 'povoado', g: 'a terra', k: 'glyph', m: 900 },
+  { id: 'cais', pt: 'cais e molhe', g: 'a terra', k: 'glyph', m: 600, rot: 1 },
+  // --- os navios (uma silhueta por tipo; cada classe tem o seu slot mais abaixo) ---
+  { id: 'cv', pt: 'porta-aviões de esquadra', g: 'navios', k: 'glyph', m: 260, rot: 1, ship: 1 },
+  { id: 'cvl', pt: 'porta-aviões leve', g: 'navios', k: 'glyph', m: 190, rot: 1, ship: 1 },
+  { id: 'cve', pt: 'porta-aviões de escolta', g: 'navios', k: 'glyph', m: 150, rot: 1, ship: 1 },
+  { id: 'bb', pt: 'encouraçado', g: 'navios', k: 'glyph', m: 240, rot: 1, ship: 1 },
+  { id: 'bc', pt: 'cruzador de batalha', g: 'navios', k: 'glyph', m: 240, rot: 1, ship: 1 },
+  { id: 'ca', pt: 'cruzador pesado', g: 'navios', k: 'glyph', m: 190, rot: 1, ship: 1 },
+  { id: 'cl', pt: 'cruzador leve', g: 'navios', k: 'glyph', m: 160, rot: 1, ship: 1 },
+  { id: 'claa', pt: 'cruzador antiaéreo', g: 'navios', k: 'glyph', m: 160, rot: 1, ship: 1 },
+  { id: 'dd', pt: 'contratorpedeiro', g: 'navios', k: 'glyph', m: 115, rot: 1, ship: 1 },
+  { id: 'de', pt: 'escolta', g: 'navios', k: 'glyph', m: 95, rot: 1, ship: 1 },
+  { id: 'ss', pt: 'submarino', g: 'navios', k: 'glyph', m: 95, rot: 1, ship: 1 },
+  { id: 'pt', pt: 'lancha torpedeira', g: 'navios', k: 'glyph', m: 24, rot: 1, ship: 1 },
+  { id: 'ap', pt: 'transporte', g: 'navios', k: 'glyph', m: 135, rot: 1, ship: 1 },
+  { id: 'ao', pt: 'petroleiro de esquadra', g: 'navios', k: 'glyph', m: 165, rot: 1, ship: 1 },
+  { id: 'av', pt: 'navio-base de hidroaviões', g: 'navios', k: 'glyph', m: 185, rot: 1, ship: 1 },
+  { id: 'lst', pt: 'navio de desembarque', g: 'navios', k: 'glyph', m: 100, rot: 1, ship: 1 },
+  { id: 'lc', pt: 'barcaça de desembarque', g: 'navios', k: 'glyph', m: 15, rot: 1, ship: 1 },
+  { id: 'esteira', pt: 'esteira', g: 'navios', k: 'line', m: 400 },
+  { id: 'fumaca', pt: 'fumaça de chaminé', g: 'navios', k: 'glyph', m: 300, rot: 1 },
+  { id: 'incendio', pt: 'incêndio a bordo', g: 'navios', k: 'glyph', m: 60 },
+  { id: 'adernado', pt: 'navio adernado', g: 'navios', k: 'glyph', m: 160, rot: 1 },
+  { id: 'naufragio', pt: 'naufrágio (mancha de óleo)', g: 'navios', k: 'glyph', m: 700 },
+  // --- o convés, visto de muito perto ---
+  { id: 'chapeamento', pt: 'chapeamento do convés', g: 'convés', k: 'tile', m: 12 },
+  { id: 'convoo', pt: 'convés de voo (marcação)', g: 'convés', k: 'tile', m: 30 },
+  { id: 'torre', pt: 'torre de artilharia', g: 'convés', k: 'glyph', m: 22, rot: 1 },
+  { id: 'superestrutura', pt: 'superestrutura / ilha', g: 'convés', k: 'glyph', m: 40, rot: 1 },
+  { id: 'chamine', pt: 'chaminé', g: 'convés', k: 'glyph', m: 12, rot: 1 },
+  { id: 'aa', pt: 'reparo antiaéreo', g: 'convés', k: 'glyph', m: 6, rot: 1 },
+  { id: 'catapulta', pt: 'catapulta', g: 'convés', k: 'glyph', m: 20, rot: 1 },
+  { id: 'elevador', pt: 'elevador de aeronaves', g: 'convés', k: 'glyph', m: 16, rot: 1 },
+  { id: 'bote', pt: 'escaler', g: 'convés', k: 'glyph', m: 9, rot: 1 },
+  { id: 'marinheiro', pt: 'marinheiro', g: 'convés', k: 'glyph', m: 1.8, rot: 1 },
+  // --- as aeronaves ---
+  { id: 'caca_jp', pt: 'caça japonês (Zero)', g: 'aeronaves', k: 'glyph', m: 12, rot: 1, air: 1 },
+  { id: 'caca_us', pt: 'caça americano (Hellcat)', g: 'aeronaves', k: 'glyph', m: 13, rot: 1, air: 1 },
+  { id: 'mergulho_jp', pt: 'bombardeiro de mergulho japonês', g: 'aeronaves', k: 'glyph', m: 14, rot: 1, air: 1 },
+  { id: 'mergulho_us', pt: 'bombardeiro de mergulho americano', g: 'aeronaves', k: 'glyph', m: 13, rot: 1, air: 1 },
+  { id: 'torpedeiro_jp', pt: 'torpedeiro japonês (Kate)', g: 'aeronaves', k: 'glyph', m: 16, rot: 1, air: 1 },
+  { id: 'torpedeiro_us', pt: 'torpedeiro americano (Avenger)', g: 'aeronaves', k: 'glyph', m: 17, rot: 1, air: 1 },
+  { id: 'patrulha', pt: 'hidroavião de patrulha', g: 'aeronaves', k: 'glyph', m: 32, rot: 1, air: 1 },
+  { id: 'bombardeiro', pt: 'bombardeiro pesado', g: 'aeronaves', k: 'glyph', m: 43, rot: 1, air: 1 },
+  { id: 'kamikaze', pt: 'kamikaze', g: 'aeronaves', k: 'glyph', m: 12, rot: 1, air: 1 },
+  { id: 'formacao', pt: 'formação aérea (símbolo)', g: 'aeronaves', k: 'glyph', m: 9000, rot: 1 },
+  { id: 'busca', pt: 'setor de busca aérea', g: 'aeronaves', k: 'line', m: 60000 },
+  // --- o combate ---
+  { id: 'explosao', pt: 'explosão', g: 'combate', k: 'glyph', m: 90 },
+  { id: 'coluna', pt: 'coluna de água (tiro curto)', g: 'combate', k: 'glyph', m: 70 },
+  { id: 'flak', pt: 'rebentamento antiaéreo', g: 'combate', k: 'glyph', m: 50 },
+  { id: 'torpedo', pt: 'esteira de torpedo', g: 'combate', k: 'line', m: 900 },
+  { id: 'fogo', pt: 'clarão de salva', g: 'combate', k: 'glyph', m: 45, rot: 1 },
+  { id: 'holofote', pt: 'holofote', g: 'combate', k: 'glyph', m: 4000, rot: 1 },
+  { id: 'bomba', pt: 'bomba em queda', g: 'combate', k: 'glyph', m: 8, rot: 1 },
+  // --- os marcadores da carta ---
+  { id: 'batalha', pt: 'marco de batalha', g: 'marcadores', k: 'glyph', m: 90000 },
+  { id: 'batalha_ar', pt: 'marco de ação aérea', g: 'marcadores', k: 'glyph', m: 90000 },
+  { id: 'batalha_sub', pt: 'marco de ação submarina', g: 'marcadores', k: 'glyph', m: 90000 },
+  { id: 'desembarque', pt: 'marco de desembarque', g: 'marcadores', k: 'glyph', m: 90000 },
+  { id: 'base_jp', pt: 'base japonesa', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'base_us', pt: 'base americana', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'base_al', pt: 'base aliada', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'ancoradouro', pt: 'ancoradouro', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'aerodromo', pt: 'campo de aviação', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'arsenal', pt: 'arsenal', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'estreito', pt: 'estreito', g: 'marcadores', k: 'glyph', m: 55000 },
+  { id: 'bandeira_jp', pt: 'pavilhão japonês', g: 'marcadores', k: 'glyph', m: 40000 },
+  { id: 'bandeira_us', pt: 'pavilhão americano', g: 'marcadores', k: 'glyph', m: 40000 },
+  { id: 'bandeira_al', pt: 'pavilhão aliado', g: 'marcadores', k: 'glyph', m: 40000 },
+  { id: 'seta_jp', pt: 'ponta de seta japonesa', g: 'marcadores', k: 'glyph', m: 60000, rot: 1 },
+  { id: 'seta_us', pt: 'ponta de seta aliada', g: 'marcadores', k: 'glyph', m: 60000, rot: 1 },
+  // --- a moldura da carta ---
+  { id: 'papel', pt: 'fundo / papel da carta', g: 'carta', k: 'tile', m: 400000 },
+  { id: 'rosa', pt: 'rosa dos ventos', g: 'carta', k: 'glyph', m: 500000 },
+  { id: 'meridiano', pt: 'cruz do meridiano', g: 'carta', k: 'glyph', m: 60000 },
+  { id: 'linha_data', pt: 'linha internacional de data', g: 'carta', k: 'line', m: 200000 },
+  { id: 'perimetro', pt: 'perímetro japonês', g: 'carta', k: 'line', m: 150000 },
+];
+const ASSET = {}; for (const a of ASSETS) ASSET[a.id] = a;
+
+/* ======================================================================
+   4. the code fallbacks — one painter per asset id, drawn in screen pixels
+      around (0,0) at width w (and height h), so the same function serves the
+      map and the preview on the sheet.
+   ====================================================================== */
+let ctx = null;                                      // swapped when the sheet draws a preview
+const DRAW = {};
+const ink = (a) => a == null ? C.ink : 'rgba(232,223,200,' + a + ')';
+function path(pts, close) { ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]); if (close) ctx.closePath(); }
+
+/* --- the sea. The two water tiles are overlays on the depth wash, not a fill:
+   they are what gives the open ocean its grain, so they stay mostly transparent
+   and a painted-over version can carry as much or as little as it likes. --- */
+DRAW.mar = (w, h, u, v) => {
+  ctx.fillStyle = 'rgba(6,18,28,0.16)';
+  for (let i = 0; i < 9; i++) { const a = h2(i + u * 7, 2, v * 3 + 4) * w - w / 2, b = h2(i, 8 + u, 6 + v) * h - h / 2; ctx.beginPath(); ctx.ellipse(a, b, w * 0.13, h * 0.055, h2(i, 3 + u, 9 + v) * 3, 0, TAU); ctx.fill(); }
+};
+DRAW.mar_raso = (w, h, u, v) => {
+  ctx.fillStyle = 'rgba(150,210,215,0.13)';
+  for (let i = 0; i < 8; i++) { const a = h2(i + u * 5, 5, v + 2) * w - w / 2, b = h2(i, 12 + u, 7 + v) * h - h / 2; ctx.beginPath(); ctx.ellipse(a, b, w * 0.12, h * 0.07, h2(i, 6 + u, 1 + v) * 3, 0, TAU); ctx.fill(); }
+};
+DRAW.vaga = (w) => {
+  ctx.strokeStyle = ink(0.30); ctx.lineWidth = Math.max(0.6, w * 0.035); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.quadraticCurveTo(-w / 6, -w * 0.10, 0, 0); ctx.quadraticCurveTo(w / 6, w * 0.10, w / 2, 0); ctx.stroke();
+};
+DRAW.carneiro = (w) => { ctx.fillStyle = ink(0.55); ctx.beginPath(); ctx.ellipse(0, 0, w / 2, w * 0.16, 0, 0, TAU); ctx.fill(); };
+DRAW.rebentacao = (w) => { ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = Math.max(0.8, w * 0.05); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); };
+DRAW.corrente = (w) => { ctx.strokeStyle = ink(0.16); ctx.lineWidth = Math.max(0.6, w * 0.008); ctx.setLineDash([w * 0.1, w * 0.07]); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); ctx.setLineDash([]); };
+DRAW.isobata = (w) => { ctx.strokeStyle = 'rgba(130,175,205,0.35)'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); };
+DRAW.sonda = (w) => { ctx.fillStyle = ink(0.42); ctx.font = (w * 0.5 | 0) + 'px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('4820', 0, 0); };
+
+/* --- the land --- */
+DRAW.praia = (w) => { ctx.strokeStyle = '#e6d8ad'; ctx.lineWidth = Math.max(1, w * 0.09); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); };
+/* No square of flat colour in either of these: a tile that fills its own cell
+   draws the grid it is tiled on. They lay down soft patches instead, and the
+   water or the land colour underneath does the rest. */
+DRAW.recife = (w, h, u, v) => {
+  ctx.fillStyle = 'rgba(126,205,200,0.16)';
+  for (let i = 0; i < 5; i++) {
+    const a = (h2(i + u * 3, 3, v + 7) - 0.5) * w, b = (h2(i, 9 + u, 2 + v) - 0.5) * h;
+    ctx.beginPath(); ctx.ellipse(a, b, w * (0.22 + h2(i, u, v) * 0.2), h * (0.16 + h2(i, v, u) * 0.16), h2(i, 4, u + v) * 3, 0, TAU); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(210,240,235,0.30)';
+  for (let i = 0; i < 9; i++) { const a = (h2(i + u, 13, v) - 0.5) * w, b = (h2(i, 17 + u, 5 + v) - 0.5) * h; ctx.beginPath(); ctx.arc(a, b, w * 0.028, 0, TAU); ctx.fill(); }
+};
+DRAW.selva = (w, h, u, v) => {
+  for (let i = 0; i < 16; i++) {
+    const a = (h2(i + u * 9, 5, v + 1) - 0.5) * w * 1.15, b = (h2(i, 11 + u, 4 + v) - 0.5) * h * 1.15;
+    const r = w * (0.11 + h2(i, 2 + u, 8 + v) * 0.09);
+    ctx.fillStyle = h2(i, 7 + u, 3 + v) < 0.5 ? 'rgba(58,86,46,0.62)' : 'rgba(84,116,64,0.55)';
+    ctx.beginPath(); ctx.arc(a, b, r, 0, TAU); ctx.fill();
+  }
+};
+DRAW.palmeira = (w) => {
+  ctx.strokeStyle = '#6b5a34'; ctx.lineWidth = Math.max(0.7, w * 0.07); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, w * 0.45); ctx.quadraticCurveTo(w * 0.06, 0, 0, -w * 0.15); ctx.stroke();
+  ctx.strokeStyle = '#5f8a42'; ctx.lineWidth = Math.max(0.7, w * 0.055);
+  for (let i = 0; i < 6; i++) { const a = -Math.PI / 2 + (i - 2.5) * 0.42; ctx.beginPath(); ctx.moveTo(0, -w * 0.15); ctx.quadraticCurveTo(Math.cos(a) * w * 0.25, -w * 0.15 + Math.sin(a) * w * 0.25, Math.cos(a) * w * 0.45, -w * 0.1 + Math.sin(a) * w * 0.40); ctx.stroke(); }
+};
+DRAW.arvore = (w) => { ctx.fillStyle = '#46653a'; ctx.beginPath(); ctx.arc(0, 0, w * 0.42, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.arc(w * 0.1, w * 0.1, w * 0.3, 0, TAU); ctx.fill(); };
+DRAW.monte = (w, h) => {
+  const H = h || w * 0.55;
+  ctx.fillStyle = '#9a8a63'; path([-w / 2, 0, -w * 0.14, -H, w * 0.06, -H * 0.72, w * 0.24, -H * 0.93, w / 2, 0], true); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'; path([-w * 0.14, -H, w * 0.06, -H * 0.72, w * 0.24, -H * 0.93, w / 2, 0], true); ctx.fill();
+  ctx.strokeStyle = ink(0.5); ctx.lineWidth = 0.8; path([-w / 2, 0, -w * 0.14, -H, w * 0.06, -H * 0.72, w * 0.24, -H * 0.93, w / 2, 0]); ctx.stroke();
+};
+DRAW.vulcao = (w, h) => {
+  const H = h || w * 0.6;
+  ctx.fillStyle = '#7b6a52'; path([-w / 2, 0, -w * 0.12, -H, w * 0.12, -H, w / 2, 0], true); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; path([0, -H, w * 0.12, -H, w / 2, 0, 0, 0], true); ctx.fill();
+  ctx.fillStyle = 'rgba(240,230,220,0.55)'; ctx.beginPath(); ctx.ellipse(0, -H, w * 0.12, w * 0.035, 0, 0, TAU); ctx.fill();
+};
+DRAW.pista = (w) => {
+  ctx.fillStyle = '#8d8470'; ctx.fillRect(-w / 2, -w * 0.07, w, w * 0.14);
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = Math.max(0.5, w * 0.012); ctx.setLineDash([w * 0.06, w * 0.05]);
+  ctx.beginPath(); ctx.moveTo(-w * 0.44, 0); ctx.lineTo(w * 0.44, 0); ctx.stroke(); ctx.setLineDash([]);
+};
+DRAW.vila = (w) => { ctx.fillStyle = '#8a6a4a'; for (let i = 0; i < 5; i++) { const a = h2(i, 1, 5) * w - w / 2, b = h2(i, 4, 6) * w * 0.6 - w * 0.3; ctx.fillRect(a, b, w * 0.16, w * 0.11); } };
+DRAW.cais = (w) => { ctx.fillStyle = '#6f6656'; ctx.fillRect(-w / 2, -w * 0.06, w, w * 0.12); ctx.fillRect(w * 0.3, -w * 0.3, w * 0.12, w * 0.6); };
+
+/* ======================================================================
+   4b. the ships. A hull in plan: a pointed bow, parallel sides, a rounded
+       stern, and whatever the class database says goes on top of it. The
+       type-level slots below draw a representative class so the sheet has
+       something to show; on the map, drawShip() passes the real class.
+   ====================================================================== */
+const HULL = { jp: '#97a189', us: '#8fa0b2', rn: '#93a0ae', ran: '#93a0ae', rnn: '#93a0ae' };
+const DECK = { jp: '#6e6448', us: '#44535f', rn: '#4e5764', ran: '#4e5764', rnn: '#4e5764' };
+function hullPath(L, B) {                            // bow at -L/2, stern at +L/2
+  ctx.beginPath();
+  ctx.moveTo(-L / 2, 0);
+  ctx.quadraticCurveTo(-L * 0.42, -B / 2, -L * 0.22, -B / 2);
+  ctx.lineTo(L * 0.30, -B / 2);
+  ctx.quadraticCurveTo(L * 0.47, -B / 2, L * 0.5, -B * 0.26);
+  ctx.lineTo(L * 0.5, B * 0.26);
+  ctx.quadraticCurveTo(L * 0.47, B / 2, L * 0.30, B / 2);
+  ctx.lineTo(-L * 0.22, B / 2);
+  ctx.quadraticCurveTo(-L * 0.42, B / 2, -L / 2, 0);
+  ctx.closePath();
+}
+function shipPlan(L, cls, navy) {
+  /* A carrier is 261 m by 30 m: at formation scale a true-to-scale hull is a
+     two-pixel sliver and reads as a scratch. So the beam gets a floor of seven
+     pixels, which every chart has always done — and which cancels itself out,
+     because past about 25 m of hull the true beam is already wider. */
+  const trueB = L * (cls ? cls.b / cls.l : 0.11);
+  const B = Math.max(2.2, trueB, Math.min(L * 0.32, 7));
+  const nv = navy || (cls && cls.nv) || 'ijn', side = nv === 'ijn' ? 'jp' : 'us';
+  hullPath(L, B); ctx.fillStyle = HULL[side]; ctx.fill();
+  ctx.lineWidth = Math.max(0.35, L * 0.006); ctx.strokeStyle = 'rgba(12,20,26,0.75)'; ctx.stroke();
+  if (L < 9) return;                                 // too small on screen to carry any fitting
+  const t = cls ? cls.t : 'DD';
+  if (cls && cls.fd) {                               // a flight deck covers the hull
+    const fl = Math.min(L * 0.99, cls.fd.l / cls.l * L), fw = Math.max(B * 0.92, cls.fd.w / cls.l * L);
+    ctx.fillStyle = DECK[side]; ctx.beginPath(); ctx.rect(-fl / 2, -fw / 2, fl, fw); ctx.fill();
+    ctx.strokeStyle = 'rgba(12,20,26,0.6)'; ctx.stroke();
+    if (L > 30) {                                    // centreline, lifts and the island
+      ctx.strokeStyle = 'rgba(240,240,230,0.45)'; ctx.lineWidth = Math.max(0.3, L * 0.004);
+      ctx.setLineDash([L * 0.03, L * 0.025]); ctx.beginPath(); ctx.moveTo(-fl * 0.45, 0); ctx.lineTo(fl * 0.45, 0); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(20,28,34,0.35)';
+      for (let i = 0; i < (cls.fd.lf || 2); i++) { const px = -fl * 0.32 + i * fl * 0.62 / Math.max(1, (cls.fd.lf || 2) - 1); ctx.fillRect(px - fl * 0.035, -fw * 0.28, fl * 0.07, fw * 0.56); }
+      const isl = cls.fd.i === 'p' ? -1 : 1;
+      if (cls.fd.i !== 'none') { ctx.fillStyle = '#4b5560'; ctx.fillRect(-fl * 0.02, isl * fw * 0.34, fl * 0.13, isl * fw * 0.16); }
+    }
+    return;
+  }
+  ctx.fillStyle = DECK[side];                        // the superstructure block
+  const sl = t === 'SS' ? L * 0.16 : L * (t === 'DD' || t === 'DE' ? 0.26 : 0.34);
+  ctx.fillRect(-sl * 0.35, -B * 0.3, sl, B * 0.6);
+  if (t === 'SS') { ctx.fillStyle = '#3d4a50'; ctx.fillRect(-L * 0.05, -B * 0.22, L * 0.13, B * 0.44); return; }
+  const tu = (cls && cls.tu) || [];
+  for (const g of tu) {
+    const px = -L / 2 + g.x * L, r = Math.max(0.8, L * (g.c >= 30 ? 0.032 : g.c >= 15 ? 0.024 : 0.017));
+    ctx.fillStyle = '#3f4a52'; ctx.beginPath(); ctx.arc(px, 0, r, 0, TAU); ctx.fill();
+    if (L > 40) {                                    // barrels, pointing the way the mount faces
+      ctx.strokeStyle = '#2b343a'; ctx.lineWidth = Math.max(0.3, r * 0.24); ctx.lineCap = 'round';
+      const dir = g.a ? 1 : -1;
+      for (let k = 0; k < g.b; k++) {
+        const off = (k - (g.b - 1) / 2) * r * 0.55;
+        ctx.beginPath(); ctx.moveTo(px, off); ctx.lineTo(px + dir * r * 2.4, off); ctx.stroke();
+      }
+    }
+  }
+  if (L > 26) {                                      // funnels
+    const nf = t === 'BB' || t === 'CA' ? 2 : t === 'DD' ? 2 : 1;
+    ctx.fillStyle = '#333c43';
+    for (let i = 0; i < nf; i++) { const px = L * (0.02 + i * 0.12); ctx.beginPath(); ctx.ellipse(px, 0, L * 0.022, B * 0.17, 0, 0, TAU); ctx.fill(); }
+  }
+}
+const TYPE_DEMO = { cv: 'shokaku', cvl: 'zuiho', cve: 'casablanca', bb: 'yamato', bc: 'repulse', ca: 'takao', cl: 'agano', claa: 'atlanta', dd: 'fletcher', de: 'johncbutler', ss: 'gato', pt: 'pt-elco80', ap: 'maru-transport', ao: 'cimarron', av: 'chitose-av', lst: 'lst', lc: 'daihatsu' };
+const SHIPS = {}; for (const s of HI.ships) SHIPS[s.id] = s;
+for (const k of Object.keys(TYPE_DEMO)) DRAW[k] = (w) => shipPlan(w, SHIPS[TYPE_DEMO[k]] || null);
+
+DRAW.esteira = (w) => {
+  const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+  g.addColorStop(0, 'rgba(255,255,255,0.42)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; path([-w / 2, -w * 0.02, w / 2, -w * 0.09, w / 2, w * 0.09, -w / 2, w * 0.02], true); ctx.fill();
+};
+DRAW.fumaca = (w) => {
+  ctx.fillStyle = 'rgba(40,40,44,0.30)';
+  for (let i = 0; i < 7; i++) { const t = i / 6; ctx.beginPath(); ctx.arc(-w / 2 + t * w, -t * w * 0.16, w * (0.05 + t * 0.11), 0, TAU); ctx.fill(); }
+};
+DRAW.incendio = (w) => {
+  ctx.fillStyle = '#e8912e'; ctx.beginPath(); ctx.moveTo(0, w * 0.5); ctx.quadraticCurveTo(-w * 0.34, 0, 0, -w * 0.5); ctx.quadraticCurveTo(w * 0.34, 0, 0, w * 0.5); ctx.fill();
+  ctx.fillStyle = '#f5d878'; ctx.beginPath(); ctx.moveTo(0, w * 0.3); ctx.quadraticCurveTo(-w * 0.16, 0, 0, -w * 0.28); ctx.quadraticCurveTo(w * 0.16, 0, 0, w * 0.3); ctx.fill();
+};
+DRAW.adernado = (w) => { ctx.save(); ctx.rotate(0.35); ctx.globalAlpha = 0.75; shipPlan(w, SHIPS.takao || null); ctx.restore(); };
+DRAW.naufragio = (w) => {
+  ctx.fillStyle = 'rgba(20,18,14,0.35)';
+  ctx.beginPath(); ctx.ellipse(0, 0, w / 2, w * 0.3, 0.3, 0, TAU); ctx.fill();
+  ctx.strokeStyle = ink(0.7); ctx.lineWidth = Math.max(0.8, w * 0.02);
+  ctx.beginPath(); ctx.moveTo(-w * 0.14, -w * 0.12); ctx.lineTo(w * 0.14, w * 0.12); ctx.moveTo(w * 0.14, -w * 0.12); ctx.lineTo(-w * 0.14, w * 0.12); ctx.stroke();
+};
+
+/* --- the deck, at a metre or less to the pixel --- */
+DRAW.chapeamento = (w, h) => {
+  ctx.fillStyle = '#6b7480'; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.strokeStyle = 'rgba(20,26,32,0.25)'; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.moveTo(0, -h / 2); ctx.lineTo(0, h / 2); ctx.stroke();
+};
+DRAW.convoo = (w, h) => {
+  ctx.fillStyle = '#5a4a38'; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.strokeStyle = 'rgba(245,240,225,0.5)'; ctx.lineWidth = Math.max(0.6, w * 0.03);
+  ctx.beginPath(); ctx.moveTo(0, -h / 2); ctx.lineTo(0, h / 2); ctx.stroke();
+};
+DRAW.torre = (w) => {
+  ctx.fillStyle = '#3f4a52'; ctx.beginPath(); ctx.arc(0, 0, w * 0.3, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#2b343a'; ctx.lineWidth = Math.max(0.6, w * 0.07); ctx.lineCap = 'round';
+  for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(0, k * w * 0.13); ctx.lineTo(-w * 0.5, k * w * 0.13); ctx.stroke(); }
+};
+DRAW.superestrutura = (w) => {
+  ctx.fillStyle = '#4b5560'; ctx.fillRect(-w * 0.3, -w * 0.22, w * 0.6, w * 0.44);
+  ctx.fillStyle = '#5c6874'; ctx.fillRect(-w * 0.14, -w * 0.12, w * 0.28, w * 0.24);
+  ctx.strokeStyle = '#2b343a'; ctx.lineWidth = Math.max(0.4, w * 0.02); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -w * 0.42); ctx.stroke();
+};
+DRAW.chamine = (w) => { ctx.fillStyle = '#333c43'; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.28, w * 0.4, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#1c2227'; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.16, w * 0.26, 0, 0, TAU); ctx.fill(); };
+DRAW.aa = (w) => { ctx.fillStyle = '#47525b'; ctx.beginPath(); ctx.arc(0, 0, w * 0.35, 0, TAU); ctx.fill(); ctx.strokeStyle = '#262e34'; ctx.lineWidth = Math.max(0.4, w * 0.1); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(w * 0.55, 0); ctx.stroke(); };
+DRAW.catapulta = (w) => { ctx.fillStyle = '#525c66'; ctx.fillRect(-w / 2, -w * 0.06, w, w * 0.12); ctx.fillStyle = '#3d464f'; ctx.fillRect(w * 0.3, -w * 0.1, w * 0.12, w * 0.2); };
+DRAW.elevador = (w) => { ctx.fillStyle = 'rgba(22,28,34,0.4)'; ctx.fillRect(-w / 2, -w * 0.4, w, w * 0.8); ctx.strokeStyle = 'rgba(240,235,220,0.3)'; ctx.lineWidth = 0.7; ctx.strokeRect(-w / 2, -w * 0.4, w, w * 0.8); };
+DRAW.bote = (w) => { ctx.fillStyle = '#8a8168'; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.5, w * 0.17, 0, 0, TAU); ctx.fill(); };
+DRAW.marinheiro = (w) => { ctx.fillStyle = '#d9d2bc'; ctx.beginPath(); ctx.arc(0, 0, w * 0.5, 0, TAU); ctx.fill(); };
+
+/* --- aircraft, in plan: fuselage, wing, tail --- */
+function plane(w, wing, col, tail) {
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.ellipse(0, 0, w * 0.42, w * 0.07, 0, 0, TAU); ctx.fill();            // fuselage
+  ctx.fillRect(-w * 0.06, -wing / 2, w * 0.16, wing);                                        // wing
+  ctx.fillRect(w * 0.28, -wing * (tail || 0.32) / 2, w * 0.08, wing * (tail || 0.32));       // tailplane
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(-w * 0.06, -wing / 2, w * 0.16, wing * 0.18);
+}
+DRAW.caca_jp = (w) => plane(w, w * 0.95, '#9aa588');
+DRAW.caca_us = (w) => plane(w, w * 0.95, '#48606f');
+DRAW.mergulho_jp = (w) => plane(w, w * 1.05, '#8d9a7e');
+DRAW.mergulho_us = (w) => plane(w, w * 1.05, '#41586a');
+DRAW.torpedeiro_jp = (w) => plane(w, w * 1.15, '#7e8c72');
+DRAW.torpedeiro_us = (w) => plane(w, w * 1.10, '#3b5164');
+DRAW.patrulha = (w) => { plane(w, w * 1.35, '#5d6f7c', 0.4); ctx.fillStyle = '#4a5a66'; ctx.fillRect(-w * 0.2, -w * 0.55, w * 0.06, w * 0.16); ctx.fillRect(-w * 0.2, w * 0.39, w * 0.06, w * 0.16); };
+DRAW.bombardeiro = (w) => { plane(w, w * 1.25, '#8d949a', 0.42); ctx.fillStyle = '#6f767c'; for (const s of [-1, 1]) for (const d of [0.22, 0.38]) ctx.fillRect(-w * 0.04, s * w * d, w * 0.14, w * 0.05); };
+DRAW.kamikaze = (w) => { plane(w, w * 0.95, '#a08272'); ctx.fillStyle = '#c8433a'; ctx.beginPath(); ctx.arc(0, 0, w * 0.11, 0, TAU); ctx.fill(); };
+DRAW.formacao = (w) => {
+  ctx.strokeStyle = ink(0.75); ctx.lineWidth = Math.max(1, w * 0.02); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let i = 0; i < 3; i++) { const o = (i - 1) * w * 0.3; path([-w * 0.16 + o, w * 0.14, o, -w * 0.14, w * 0.16 + o, w * 0.14]); ctx.stroke(); }
+};
+DRAW.busca = (w) => { ctx.strokeStyle = ink(0.22); ctx.lineWidth = 1; ctx.setLineDash([w * 0.05, w * 0.04]); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); ctx.setLineDash([]); };
+
+/* --- combat --- */
+DRAW.explosao = (w) => {
+  ctx.fillStyle = '#f0b040';
+  ctx.beginPath();
+  for (let i = 0; i < 16; i++) { const a = i * TAU / 16, r = w * (i % 2 ? 0.22 : 0.5) * (0.75 + h2(i, 3, 1) * 0.5); const px = Math.cos(a) * r, py = Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#fdf0c0'; ctx.beginPath(); ctx.arc(0, 0, w * 0.17, 0, TAU); ctx.fill();
+};
+DRAW.coluna = (w) => {
+  const g = ctx.createLinearGradient(0, w * 0.5, 0, -w * 0.5);
+  g.addColorStop(0, 'rgba(230,245,250,0.75)'); g.addColorStop(1, 'rgba(230,245,250,0)');
+  ctx.fillStyle = g; path([-w * 0.16, w * 0.5, -w * 0.08, -w * 0.5, w * 0.08, -w * 0.5, w * 0.16, w * 0.5], true); ctx.fill();
+};
+DRAW.flak = (w) => { ctx.fillStyle = 'rgba(40,40,42,0.55)'; ctx.beginPath(); ctx.arc(0, 0, w * 0.3, 0, TAU); ctx.fill(); ctx.fillStyle = 'rgba(255,210,120,0.5)'; ctx.beginPath(); ctx.arc(0, 0, w * 0.13, 0, TAU); ctx.fill(); };
+DRAW.torpedo = (w) => { ctx.strokeStyle = 'rgba(240,250,255,0.5)'; ctx.lineWidth = Math.max(0.7, w * 0.012); ctx.setLineDash([w * 0.045, w * 0.03]); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); ctx.setLineDash([]); };
+DRAW.fogo = (w) => { ctx.fillStyle = 'rgba(255,225,150,0.85)'; path([0, 0, w * 0.5, -w * 0.14, w * 0.62, 0, w * 0.5, w * 0.14], true); ctx.fill(); };
+DRAW.holofote = (w) => { const g = ctx.createLinearGradient(0, 0, w / 2, 0); g.addColorStop(0, 'rgba(255,250,220,0.35)'); g.addColorStop(1, 'rgba(255,250,220,0)'); ctx.fillStyle = g; path([0, 0, w / 2, -w * 0.09, w / 2, w * 0.09], true); ctx.fill(); };
+DRAW.bomba = (w) => { ctx.fillStyle = '#333b41'; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.5, w * 0.16, 0, 0, TAU); ctx.fill(); };
+
+/* --- the chart's own marks --- */
+function marker(w, fill, glyph) {
+  ctx.beginPath(); ctx.arc(0, 0, w * 0.34, 0, TAU);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = ink(0.85); ctx.lineWidth = Math.max(0.8, w * 0.025); ctx.stroke();
+  if (glyph) { ctx.fillStyle = '#f3ecd8'; ctx.font = 'bold ' + (w * 0.36 | 0) + 'px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(glyph, 0, w * 0.02); }
+}
+DRAW.batalha = (w) => {
+  ctx.strokeStyle = '#e2a23a'; ctx.lineWidth = Math.max(1.1, w * 0.05); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-w * 0.3, -w * 0.3); ctx.lineTo(w * 0.3, w * 0.3); ctx.moveTo(w * 0.3, -w * 0.3); ctx.lineTo(-w * 0.3, w * 0.3); ctx.stroke();
+  ctx.fillStyle = 'rgba(226,162,58,0.9)'; ctx.beginPath(); ctx.arc(0, 0, w * 0.1, 0, TAU); ctx.fill();
+};
+DRAW.batalha_ar = (w) => { DRAW.formacao(w * 0.9); ctx.strokeStyle = '#e2a23a'; ctx.lineWidth = Math.max(0.9, w * 0.03); ctx.beginPath(); ctx.arc(0, 0, w * 0.42, 0, TAU); ctx.stroke(); };
+DRAW.batalha_sub = (w) => {
+  ctx.strokeStyle = '#7fd0c0'; ctx.lineWidth = Math.max(1, w * 0.04);
+  ctx.beginPath(); ctx.arc(0, 0, w * 0.34, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-w * 0.3, w * 0.05); ctx.quadraticCurveTo(0, -w * 0.22, w * 0.3, w * 0.05); ctx.stroke();
+};
+DRAW.desembarque = (w) => {
+  ctx.fillStyle = '#5aa06a'; path([-w * 0.34, -w * 0.2, w * 0.06, -w * 0.2, w * 0.34, 0, w * 0.06, w * 0.2, -w * 0.34, w * 0.2], true); ctx.fill();
+  ctx.strokeStyle = ink(0.8); ctx.lineWidth = Math.max(0.7, w * 0.02); ctx.stroke();
+};
+DRAW.base_jp = (w) => marker(w, '#b8342a', '⚓');
+DRAW.base_us = (w) => marker(w, '#2f6ba8', '⚓');
+DRAW.base_al = (w) => marker(w, '#3f8a52', '⚓');
+DRAW.ancoradouro = (w) => { ctx.strokeStyle = ink(0.8); ctx.lineWidth = Math.max(0.9, w * 0.03); ctx.beginPath(); ctx.arc(0, 0, w * 0.32, 0.5, TAU - 0.5); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, -w * 0.36); ctx.lineTo(0, w * 0.24); ctx.stroke(); };
+DRAW.aerodromo = (w) => { ctx.strokeStyle = ink(0.85); ctx.lineWidth = Math.max(0.9, w * 0.03); ctx.beginPath(); ctx.arc(0, 0, w * 0.3, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-w * 0.24, w * 0.16); ctx.lineTo(w * 0.24, -w * 0.16); ctx.stroke(); };
+DRAW.arsenal = (w) => { ctx.fillStyle = '#8e7a4e'; ctx.fillRect(-w * 0.28, -w * 0.2, w * 0.56, w * 0.4); ctx.strokeStyle = ink(0.8); ctx.lineWidth = Math.max(0.7, w * 0.022); ctx.strokeRect(-w * 0.28, -w * 0.2, w * 0.56, w * 0.4); ctx.beginPath(); ctx.moveTo(-w * 0.28, 0); ctx.lineTo(w * 0.28, 0); ctx.stroke(); };
+DRAW.estreito = (w) => { ctx.strokeStyle = ink(0.6); ctx.lineWidth = Math.max(0.9, w * 0.03); ctx.beginPath(); ctx.moveTo(-w * 0.3, -w * 0.3); ctx.quadraticCurveTo(0, -w * 0.05, w * 0.3, -w * 0.3); ctx.moveTo(-w * 0.3, w * 0.3); ctx.quadraticCurveTo(0, w * 0.05, w * 0.3, w * 0.3); ctx.stroke(); };
+function ensign(w, draw) {
+  ctx.fillStyle = '#f2ecd8'; ctx.fillRect(-w * 0.34, -w * 0.22, w * 0.68, w * 0.44);
+  draw(w);
+  ctx.strokeStyle = ink(0.5); ctx.lineWidth = Math.max(0.5, w * 0.015); ctx.strokeRect(-w * 0.34, -w * 0.22, w * 0.68, w * 0.44);
+}
+DRAW.bandeira_jp = (w) => ensign(w, () => {
+  ctx.fillStyle = '#c8332a'; ctx.beginPath(); ctx.arc(-w * 0.06, 0, w * 0.13, 0, TAU); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.rect(-w * 0.34, -w * 0.22, w * 0.68, w * 0.44); ctx.clip();
+  for (let i = 0; i < 16; i++) { const a = i * TAU / 16; ctx.beginPath(); ctx.moveTo(-w * 0.06, 0); ctx.lineTo(-w * 0.06 + Math.cos(a) * w * 0.6, Math.sin(a) * w * 0.6); ctx.lineTo(-w * 0.06 + Math.cos(a + 0.11) * w * 0.6, Math.sin(a + 0.11) * w * 0.6); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+});
+DRAW.bandeira_us = (w) => ensign(w, () => {
+  ctx.fillStyle = '#b4342c'; for (let i = 0; i < 7; i++) ctx.fillRect(-w * 0.34, -w * 0.22 + i * w * 0.0628, w * 0.68, w * 0.031);
+  ctx.fillStyle = '#2d4a86'; ctx.fillRect(-w * 0.34, -w * 0.22, w * 0.27, w * 0.22);
+});
+DRAW.bandeira_al = (w) => ensign(w, () => {
+  ctx.fillStyle = '#2d4a86'; ctx.fillRect(-w * 0.34, -w * 0.22, w * 0.68, w * 0.44);
+  ctx.strokeStyle = '#f2ecd8'; ctx.lineWidth = w * 0.05;
+  ctx.beginPath(); ctx.moveTo(-w * 0.34, -w * 0.22); ctx.lineTo(w * 0.0, w * 0.0); ctx.moveTo(w * 0.0, -w * 0.22); ctx.lineTo(-w * 0.34, w * 0.0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-w * 0.17, -w * 0.22); ctx.lineTo(-w * 0.17, 0); ctx.moveTo(-w * 0.34, -w * 0.11); ctx.lineTo(w * 0, -w * 0.11); ctx.stroke();
+});
+function arrow(w, col) { ctx.fillStyle = col; path([w * 0.5, 0, -w * 0.3, -w * 0.26, -w * 0.14, 0, -w * 0.3, w * 0.26], true); ctx.fill(); }
+DRAW.seta_jp = (w) => arrow(w, '#d04030');
+DRAW.seta_us = (w) => arrow(w, '#4a86c8');
+
+DRAW.papel = (w, h) => { ctx.fillStyle = C.paper; ctx.fillRect(-w / 2, -h / 2, w, h); };
+DRAW.rosa = (w) => {
+  ctx.strokeStyle = ink(0.55); ctx.lineWidth = Math.max(0.8, w * 0.005);
+  ctx.beginPath(); ctx.arc(0, 0, w * 0.34, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, w * 0.40, 0, TAU); ctx.stroke();
+  for (let i = 0; i < 32; i++) { const a = i * TAU / 32, r = i % 8 === 0 ? 0.28 : i % 4 === 0 ? 0.31 : 0.335; ctx.beginPath(); ctx.moveTo(Math.cos(a) * w * r, Math.sin(a) * w * r); ctx.lineTo(Math.cos(a) * w * 0.40, Math.sin(a) * w * 0.40); ctx.stroke(); }
+  for (let i = 0; i < 8; i++) {
+    const a = i * TAU / 8;
+    ctx.fillStyle = i % 2 ? ink(0.25) : ink(0.7);
+    path([Math.cos(a) * w * 0.30, Math.sin(a) * w * 0.30, Math.cos(a + TAU / 16) * w * 0.05, Math.sin(a + TAU / 16) * w * 0.05, 0, 0], true); ctx.fill();
+    path([Math.cos(a) * w * 0.30, Math.sin(a) * w * 0.30, Math.cos(a - TAU / 16) * w * 0.05, Math.sin(a - TAU / 16) * w * 0.05, 0, 0], true); ctx.fill();
+  }
+  ctx.fillStyle = ink(0.8); ctx.font = (w * 0.07 | 0) + 'px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', 0, -w * 0.46);
+};
+DRAW.meridiano = (w) => { ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-w * 0.12, 0); ctx.lineTo(w * 0.12, 0); ctx.moveTo(0, -w * 0.12); ctx.lineTo(0, w * 0.12); ctx.stroke(); };
+DRAW.linha_data = (w) => { ctx.strokeStyle = 'rgba(216,178,94,0.5)'; ctx.lineWidth = 1.4; ctx.setLineDash([w * 0.04, w * 0.03, w * 0.008, w * 0.03]); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); ctx.setLineDash([]); };
+DRAW.perimetro = (w) => { ctx.strokeStyle = 'rgba(208,64,48,0.75)'; ctx.lineWidth = 1.8; ctx.setLineDash([w * 0.05, w * 0.028]); ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke(); ctx.setLineDash([]); };
+
+/* every class in the database is its own slot too, so a hull can be replaced
+   one class at a time without touching the type-level silhouette */
+for (const s of HI.ships) {
+  const id = 'navio_' + s.id;
+  ASSETS.push({ id, pt: s.n + ' (' + s.t + ', ' + s.l + ' m)', g: 'classes', k: 'glyph', m: s.l, rot: 1, cls: s.id });
+  ASSET[id] = ASSETS[ASSETS.length - 1];
+  DRAW[id] = (w) => shipPlan(w, s);
+}
+
+/* ======================================================================
+   5. resolving a slot to a picture
+   ----------------------------------------------------------------------
+   Three sources, in order: what the user dropped (kept in IndexedDB so it
+   survives a reload of a file:// page), what was packed into this file at
+   build time, and the code above. useSprites toggles the first two off.
+   ====================================================================== */
+const SPR = {}, MINE = {};                            // packed sprites · user overrides
+let useSprites = true, spritesReady = false, pending = 0;
+function addImage(bag, name, b64) {
+  const im = new Image();
+  pending++;
+  im.onload = im.onerror = () => {
+    if (--pending <= 0) { pending = 0; spritesReady = true; }
+    dirty = true;
+    delete PAT[name];                                 // a tile's cached pattern is now stale
+    if (sheetOn) paintSlot(name);                     // decoding is async: repaint once it is in
+  };
+  im.src = b64.startsWith('data:') ? b64 : 'data:image/png;base64,' + b64;
+  bag[name] = im;
+}
+(function loadPacked() {
+  let J = {};
+  try { J = JSON.parse(document.getElementById('sprites').textContent || '{}'); } catch (e) { J = {}; }
+  const names = Object.keys(J);
+  if (!names.length) { spritesReady = true; return; }
+  for (const n of names) addImage(SPR, n, J[n].b64 || J[n]);
+})();
+const A = id => (useSprites && ((MINE[id] && MINE[id].complete && MINE[id].naturalWidth ? MINE[id] : null) || (SPR[id] && SPR[id].complete && SPR[id].naturalWidth ? SPR[id] : null))) || null;
+
+/* --- the user's own PNGs, in IndexedDB (localStorage is too small for 60 sprites) --- */
+const DB = (function () {
+  let db = null;
+  function open() {
+    return new Promise(function (res) {
+      if (db) { res(db); return; }
+      let rq;
+      try { rq = indexedDB.open('pacifico-assets', 1); } catch (e) { res(null); return; }
+      rq.onupgradeneeded = function () { rq.result.createObjectStore('png'); };
+      rq.onsuccess = function () { db = rq.result; res(db); };
+      rq.onerror = function () { res(null); };
+    });
+  }
+  function write(fn) {
+    return open().then(function (d) {
+      if (!d) return null;
+      return new Promise(function (res) {
+        const t = d.transaction('png', 'readwrite');
+        fn(t.objectStore('png'));
+        t.oncomplete = function () { res(true); };
+        t.onerror = function () { res(null); };
+      });
+    });
+  }
+  return {
+    put: function (k, v) { return write(function (s) { s.put(v, k); }); },
+    del: function (k) { return write(function (s) { s.delete(k); }); },
+    clear: function () { return write(function (s) { s.clear(); }); },
+    entries: function () {
+      return open().then(function (d) {
+        if (!d) return {};
+        return new Promise(function (res) {
+          const out = {}, c = d.transaction('png', 'readonly').objectStore('png').openCursor();
+          c.onsuccess = function (e) { const cur = e.target.result; if (cur) { out[cur.key] = cur.value; cur.continue(); } else res(out); };
+          c.onerror = function () { res(out); };
+        });
+      });
+    },
+  };
+})();
+function setAsset(id, dataURL) {
+  addImage(MINE, id, dataURL);
+  DB.put(id, dataURL);
+  dirty = true; if (sheetOn) paintSlot(id);
+}
+function clearAsset(id) { delete MINE[id]; DB.del(id); dirty = true; if (sheetOn) paintSlot(id); }
+
+/* --- drawing through a slot --- */
+function drawSprite(im, x, y, w, anchor, rot) {
+  const h = w * im.naturalHeight / im.naturalWidth;
+  if (rot) { ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.drawImage(im, -w / 2, anchor === 'bottom' ? -h : -h / 2, w, h); ctx.restore(); }
+  else ctx.drawImage(im, x - w / 2, anchor === 'bottom' ? y - h : y - h / 2, w, h);
+}
+/* glyph(id, screen x, screen y, width in px, rotation, height in px)
+   The code fallback is drawn around the origin, so it gets the same translate
+   and rotate the sprite would — one contract, two implementations. */
+function glyph(id, x, y, w, rot, h) {
+  // culling here rather than at each call site: a battle's wrecks, a base's
+  // jetty and a ship's gun mounts are all drawn in loops that do not know
+  // where the edge of the canvas is
+  const r = (w > (h || w) ? w : (h || w)) * 1.2 + 4;
+  if (x < -r || x > W + r || y < -r || y > H + r) return;
+  const a = ASSET[id], im = A(id);
+  if (im) { drawSprite(im, x, y, w, a && a.an, rot); return; }
+  const f = DRAW[id]; if (!f) return;
+  ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot);
+  if (a && a.an === 'bottom') ctx.translate(0, -(h || w * 0.6) / 2);
+  f(w, h || w * 0.6);
+  ctx.restore();
+}
+/* a tile fills a screen rect with one repeat every `px` pixels */
+const PAT = {};
+function tile(id, x0, y0, x1, y1, px, alpha) {
+  if (x1 <= x0 || y1 <= y0) return;
+  const im = A(id);
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.clip();
+  if (alpha != null) ctx.globalAlpha = alpha;
+  if (im) {
+    let p = PAT[id];
+    if (!p || p.im !== im) { p = PAT[id] = { im, pat: ctx.createPattern(im, 'repeat') }; }
+    const k = px / im.naturalWidth;
+    ctx.translate(x0 - (x0 % px), y0 - (y0 % px)); ctx.scale(k, k);
+    ctx.fillStyle = p.pat; ctx.fillRect(0, 0, (x1 - x0 + px * 2) / k, (y1 - y0 + px * 2) / k);
+  } else {
+    const f = DRAW[id];
+    if (f) {
+      const i0 = Math.floor(x0 / px), i1 = Math.ceil(x1 / px), j0 = Math.floor(y0 / px), j1 = Math.ceil(y1 / px);
+      // the cell index goes to the painter so it can vary itself; a texture whose
+      // every repeat is identical reads as wallpaper, and shows its own grid
+      if ((i1 - i0) * (j1 - j0) < 4000) for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+        ctx.save(); ctx.translate(i * px + px / 2, j * px + px / 2); f(px + 1, px + 1, i, j); ctx.restore();
+      } else { ctx.save(); ctx.translate((x0 + x1) / 2, (y0 + y1) / 2); f(x1 - x0, y1 - y0, 0, 0); ctx.restore(); }
+    }
+  }
+  ctx.restore();
+}
+/* a line slot: the stamp is repeated along a polyline, rotated to the tangent */
+function stamp(id, pts, px, every) {
+  const im = A(id), f = DRAW[id];
+  if (!im && !f) return;
+  const step = every || px, m = px * 1.2 + 4;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const ax = pts[i], ay = pts[i + 1], bx = pts[i + 2], by = pts[i + 3];
+    if ((ax < -m && bx < -m) || (ax > W + m && bx > W + m) || (ay < -m && by < -m) || (ay > H + m && by > H + m)) continue;
+    const d = Math.hypot(bx - ax, by - ay); if (d < 0.5) continue;
+    const a = Math.atan2(by - ay, bx - ax), n = Math.max(1, Math.round(d / step));
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n, x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+      if (im) drawSprite(im, x, y, px, 'center', a);
+      else { ctx.save(); ctx.translate(x, y); ctx.rotate(a); f(px, px * 0.4); ctx.restore(); }
+    }
+  }
+}
+
+/* ======================================================================
+   6. camera, canvas and the zoom bands
+   ====================================================================== */
+const canvas = document.getElementById('c');
+const c2d = canvas.getContext('2d');
+ctx = c2d;
+let W = 0, H = 0, DPR = 1, dirty = true, lastFrameMs = 0;
+const cam = { x: 0, y: 0, s: 1e-5 };                  // x,y Mercator metres · s px per Mercator metre
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  // a canvas that has not been laid out yet reports zero, and a zero width
+  // would make the fit-to-window scale zero and every coordinate NaN
+  W = canvas.clientWidth || window.innerWidth || 1024;
+  H = canvas.clientHeight || window.innerHeight || 768;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  c2d.setTransform(DPR, 0, 0, DPR, 0, 0);
+  dirty = true;
+}
+const sxOf = x => (x - cam.x) * cam.s + W / 2;
+const syOf = y => (y - cam.y) * cam.s + H / 2;
+const mppTrue = () => kAt(cam.y) / cam.s;             // true metres per pixel under the camera
+const MPP = () => 1 / cam.s;                          // Mercator metres per pixel
+/* one true metre, in pixels, at a given Mercator y — a ship's length in px */
+const pxPerM = y => cam.s / kAt(y);
+
+const BANDS = [
+  { id: 'teatro', pt: 'teatro', lo: 2500, hi: 1e9 },
+  { id: 'mar', pt: 'mar', lo: 400, hi: 2500 },
+  { id: 'batalha', pt: 'batalha', lo: 55, hi: 400 },
+  { id: 'formacao', pt: 'formação', lo: 6, hi: 55 },
+  { id: 'navio', pt: 'navio', lo: 0.7, hi: 6 },
+  { id: 'conves', pt: 'convés', lo: 0, hi: 0.7 },
+];
+const bandOf = m => { for (const b of BANDS) if (m >= b.lo && m < b.hi) return b; return BANDS[0]; };
+
+/* ======================================================================
+   7. the sea floor, painted once into a Mercator-space raster
+   ----------------------------------------------------------------------
+   The fields raster is equirectangular and the map is Mercator, so the two
+   do not line up row for row. Resampling it once at load costs a third of a
+   second and buys a single drawImage for the whole ocean at chart scale.
+   ====================================================================== */
+const WIN = { x0: toXY(0, P.proj.BB.w)[0], x1: toXY(0, P.proj.BB.e)[0], y0: toXY(P.proj.BB.n, 0)[1], y1: toXY(P.proj.BB.s, 0)[1] };
+let BASE = null;
+function depthColor(d, shelf) {                       // metres -> the chart's blue ramp
+  const t = clamp(Math.pow(clamp(d / 6500, 0, 1), 0.55), 0, 1);
+  const a = STY === 'papel' ? [188, 210, 220] : STY === 'noite' ? [16, 34, 48] : [38, 92, 122];
+  const b = STY === 'papel' ? [96, 140, 164] : STY === 'noite' ? [3, 8, 14] : [10, 34, 49];
+  const k = shelf ? 0.25 : 1;
+  return [Math.round(lerp(a[0], b[0], t * k + t * (1 - k))), Math.round(lerp(a[1], b[1], t)), Math.round(lerp(a[2], b[2], t))];
+}
+/* The close-in sea is painted cell by cell, up to a couple of thousand cells a
+   frame. Building an "rgb(...)" string for each one was the single largest
+   source of garbage in the renderer, and garbage is what the half-second
+   hitches were made of. 256 buckets of 50 m cover every depth in the ocean. */
+let RAMP = null, RAMP_RGB = null, RAMP_STY = '';
+/* The buckets are spaced by the square root of the depth, not evenly: on a
+   shelf that falls 200 m over thirty kilometres, even 50 m steps terrace the
+   water into visible rectangles the size of a GEBCO cell. This way the first
+   hundred metres get a step every couple of metres and the abyssal plain,
+   where nothing changes, gets the coarse end. */
+const D_MAX = 12750;
+function buildRamp() {
+  RAMP = new Array(256); RAMP_RGB = new Array(256); RAMP_STY = STY;
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255, d = t * t * D_MAX;
+    const c = depthColor(d, d < 200);
+    RAMP_RGB[i] = c; RAMP[i] = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+  }
+}
+const rampIdx = d => d <= 0 ? 0 : d >= D_MAX ? 255 : (Math.sqrt(d / D_MAX) * 255) | 0;
+function rampAt(d) { if (RAMP_STY !== STY) buildRamp(); return RAMP[rampIdx(d)]; }
+function rampRGB(d) { if (RAMP_STY !== STY) buildRamp(); return RAMP_RGB[rampIdx(d)]; }
+let SEA = null, SEA_CTX = null, SEA_IMG = null;
+function buildBase() {
+  const BW = 1024, BH = Math.round(BW * (WIN.y1 - WIN.y0) / (WIN.x1 - WIN.x0));
+  const cv = document.createElement('canvas'); cv.width = BW; cv.height = BH;
+  const g = cv.getContext('2d'), im = g.createImageData(BW, BH), d = im.data;
+  const landRGB = STY === 'papel' ? [231, 219, 186] : STY === 'noite' ? [38, 49, 58] : [217, 204, 168];
+  for (let j = 0; j < BH; j++) {
+    const my = WIN.y0 + (j + 0.5) / BH * (WIN.y1 - WIN.y0);
+    const lat = latOf(my);
+    let fy = (FI.lat0 - lat) * FI.deg - 0.5; fy = clamp(fy, 0, FI.h - 1.001);
+    const yi = fy | 0;
+    for (let i = 0; i < BW; i++) {
+      const mx = WIN.x0 + (i + 0.5) / BW * (WIN.x1 - WIN.x0);
+      let fx = (lonOf(mx) - FI.lon0) * FI.deg - 0.5; fx = clamp(fx, 0, FI.w - 1.001);
+      const k = (yi * FI.w + (fx | 0)) * 4, o = (j * BW + i) * 4;
+      if (FD[k + 2] > 0) {                            // land: a hypsometric wash
+        const e = FD[k + 2] * FI.elevStep, t = clamp(e / 2600, 0, 1);
+        d[o] = Math.round(lerp(landRGB[0], landRGB[0] - 46, t));
+        d[o + 1] = Math.round(lerp(landRGB[1], landRGB[1] - 30, t));
+        d[o + 2] = Math.round(lerp(landRGB[2], landRGB[2] - 44, t));
+      } else {
+        const col = depthColor(FD[k] * FI.depthStep, FD[k] * FI.depthStep < 200);
+        d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2];
+      }
+      d[o + 3] = 255;
+    }
+  }
+  g.putImageData(im, 0, 0);
+  BASE = cv;
+}
+
+/* ======================================================================
+   8. clipping and inking a coastline ring
+   ====================================================================== */
+/* Sutherland-Hodgman in screen space. The two output buffers are reused across
+   every ring of every frame: allocating four arrays per ring, times 1.400
+   rings, was enough garbage to stall a frame outright. The caller must copy
+   the result if it intends to keep it past the next call. */
+const CLIP_A = [], CLIP_B = [], SCR = [], ISO = [];
+const CLIP_E = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]];
+function clipPoly(pts, x0, y0, x1, y1) {
+  CLIP_E[0][2] = -x0; CLIP_E[1][2] = x1; CLIP_E[2][2] = -y0; CLIP_E[3][2] = y1;
+  let inp = pts, out = CLIP_A;
+  for (let k = 0; k < 4; k++) {
+    const e = CLIP_E[k], ex = e[0], ey = e[1], ec = e[2];
+    out.length = 0;
+    const n = inp.length / 2;
+    if (!n) return out;
+    let ax = inp[(n - 1) * 2], ay = inp[(n - 1) * 2 + 1], ad = ex * ax + ey * ay + ec;
+    for (let i = 0; i < n; i++) {
+      const bx = inp[i * 2], by = inp[i * 2 + 1], bd = ex * bx + ey * by + ec;
+      if (bd >= 0) {
+        if (ad < 0) { const t = ad / (ad - bd); out.push(ax + (bx - ax) * t, ay + (by - ay) * t); }
+        out.push(bx, by);
+      } else if (ad >= 0) { const t = ad / (ad - bd); out.push(ax + (bx - ax) * t, ay + (by - ay) * t); }
+      ax = bx; ay = by; ad = bd;
+    }
+    inp = out;
+    out = out === CLIP_A ? CLIP_B : CLIP_A;
+  }
+  return inp;
+}
+/* at village scale the Natural Earth coast is a straight 150 m segment, so it
+   is subdivided and given a little ink tremor — the same trick the Japan map
+   uses, and for the same reason: a ruled line reads as an error, a shaky one
+   reads as a drawing */
+function inked(pts, amp, step) {
+  if (amp < 0.3) return pts;
+  const out = [];
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const ax = pts[i], ay = pts[i + 1], bx = pts[i + 2], by = pts[i + 3];
+    const d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.min(24, Math.round(d / step)));
+    for (let k = 0; k < n; k++) {
+      const t = k / n, x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+      const s = (h2(x | 0, y | 0, 91) - 0.5) * amp, u = (h2(x | 0, y | 0, 57) - 0.5) * amp;
+      out.push(x + s, y + u);
+    }
+  }
+  if (pts.length >= 2) out.push(pts[pts.length - 2], pts[pts.length - 1]);
+  return out;
+}
+
+/* ======================================================================
+   9. history in view: what exists on the chart on a given day
+   ====================================================================== */
+let today = 0;                                        // days since 1941-12-07
+const DAYS = 1364;                                    // to 1945-09-02
+const MON = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function dateOf(d) { const t = new Date(Date.UTC(1941, 11, 7) + d * 86400000); return t.getUTCDate() + ' ' + MON[t.getUTCMonth()] + ' ' + t.getUTCFullYear(); }
+const frontAt = d => { let f = HI.fronts[0]; for (const q of HI.fronts) if (q.d <= d) f = q; return f; };
+const seenBattle = b => b.d0 <= today;
+const trackLive = t => t.d0 != null && today >= t.d0 - 2 && today <= (t.d1 == null ? t.d0 : t.d1) + 2;
+
+/* where a force is along its route, as a fraction of the way, on `today` */
+function trackPos(t) {
+  const span = Math.max(1, (t.d1 == null ? t.d0 : t.d1) - t.d0);
+  const f = clamp((today - t.d0) / span, 0, 1);
+  const n = t.p.length / 2 - 1, u = f * n, i = Math.min(n - 1, u | 0), k = u - i;
+  return [lerp(t.p[i * 2], t.p[i * 2 + 2], k), lerp(t.p[i * 2 + 1], t.p[i * 2 + 3], k),
+    Math.atan2(t.p[i * 2 + 3] - t.p[i * 2 + 1], t.p[i * 2 + 2] - t.p[i * 2])];
+}
+/* a force that is not in one of the four set-piece orders of battle still gets
+   a body: a screen of destroyers around the heavies, shaped by what it is */
+const FLEET = {
+  carrier: ['cv', 'cv', 'cvl', 'bb', 'ca', 'ca', 'cl', 'dd', 'dd', 'dd', 'dd', 'dd', 'dd', 'dd', 'dd'],
+  surface: ['bb', 'bb', 'ca', 'ca', 'ca', 'cl', 'dd', 'dd', 'dd', 'dd', 'dd', 'dd'],
+  invasion: ['ap', 'ap', 'ap', 'ap', 'ap', 'ap', 'lst', 'lst', 'cve', 'cl', 'dd', 'dd', 'dd', 'dd', 'de', 'de'],
+  convoy: ['ap', 'ap', 'ap', 'ap', 'ao', 'dd', 'de', 'de'],
+  submarine: ['ss', 'ss'],
+  retreat: ['ca', 'cl', 'dd', 'dd', 'dd'],
+  air: ['cv', 'cvl', 'dd', 'dd', 'dd'],
+};
+const CLASS_FOR = { jp: { cv: 'shokaku', cvl: 'zuiho', cve: 'shinyo-cve', bb: 'kongo', ca: 'takao', cl: 'agano', dd: 'kagero', de: 'matsu', ss: 'i-15', ap: 'maru-transport', ao: 'maru-transport', lst: 'akitsu-maru', pt: 'shinyo-boat' },
+  us: { cv: 'essex', cvl: 'independence', cve: 'casablanca', bb: 'south-dakota', ca: 'baltimore', cl: 'cleveland', dd: 'fletcher', de: 'johncbutler', ss: 'gato', ap: 'liberty', ao: 'cimarron', lst: 'lst', pt: 'pt-elco80' } };
+
+/* the formation a force keeps, in nautical miles from its guide, by index */
+function station(i, kind) {
+  if (kind === 'submarine') return [i * 9, i * 5];
+  const heavy = kind === 'invasion' || kind === 'convoy' ? 6 : kind === 'carrier' ? 4 : 5;
+  if (i < heavy) { const r = i === 0 ? 0 : 1.1, a = (i - 1) * TAU / Math.max(1, heavy - 1); return [Math.cos(a) * r, Math.sin(a) * r]; }
+  const k = i - heavy, n = 10, a = k * TAU / n + 0.3;
+  return [Math.cos(a) * 2.9, Math.sin(a) * 2.9];
+}
+
+/* ======================================================================
+   10. drawing a ship: the class slot, then the type slot, then the code
+   ====================================================================== */
+const NM = 1852;
+const SYM = 26;                                       // the length a hull stops shrinking at, in pixels
+function shipAt(x, y, hdg, clsId, side, fate) {
+  const cls = SHIPS[clsId];
+  const trueL = (cls ? cls.l : 110) * pxPerM(y);
+  /* Between one ship and a whole task force on the screen, true scale makes
+     every hull a scratch. Below SYM pixels the length is compressed by a root,
+     which keeps a carrier visibly longer than a destroyer while both stay
+     legible, and meets true scale exactly at SYM so nothing jumps. */
+  const L = trueL >= SYM ? trueL : SYM * Math.pow(Math.max(trueL, 0.25) / SYM, 0.45);
+  const sx = sxOf(x), sy = syOf(y);
+  if (sx < -L || sx > W + L || sy < -L || sy > H + L) return;
+  const rot = Math.PI / 2 + hdg * D2R;
+  if (trueL < 0.8) {                                  // too small to be a hull: a tick in the right colour
+    ctx.fillStyle = side === 'jp' ? C.jp : C.us;
+    ctx.fillRect(sx - 1.1, sy - 1.1, 2.2, 2.2);
+    return;
+  }
+  if (L > 5) {                                        // wake first, so the hull sits on it
+    const wl = L * 2.4;
+    stamp('esteira', [sx, sy, sx + Math.cos(rot) * wl, sy + Math.sin(rot) * wl], L * 0.5, L * 0.45);
+  }
+  // a shadow on the water: without it a grey hull disappears into a grey sea
+  ctx.save(); ctx.translate(sx, sy); ctx.rotate(rot);
+  ctx.fillStyle = 'rgba(4,10,16,0.45)';
+  ctx.beginPath(); ctx.ellipse(L * 0.03, L * 0.03, L * 0.53, Math.max(1.2, L * 0.09), 0, 0, TAU); ctx.fill();
+  ctx.restore();
+  // a ship that went down that day heels over instead of steaming level
+  const listing = fate === 'sunk' && L > 12 && A('adernado');
+  const im = listing || A('navio_' + clsId) || A(cls ? cls.t.toLowerCase() : 'dd');
+  if (im) drawSprite(im, sx, sy, L, 'center', rot);
+  else if (fate === 'sunk' && L > 12) { ctx.save(); ctx.translate(sx, sy); ctx.rotate(rot); ctx.rotate(0); ctx.globalAlpha = 0.85; ctx.scale(1, 0.72); shipPlan(L, cls, cls && cls.nv); ctx.globalAlpha = 1; ctx.restore(); }
+  else { ctx.save(); ctx.translate(sx, sy); ctx.rotate(rot); shipPlan(L, cls, cls && cls.nv); ctx.restore(); }
+  if (L > 150) shipDeck(sx, sy, rot, cls, L);         // close enough to walk the deck
+  if (fate === 'sunk' && L > 6) {                     // several fires along the hull, not one bonfire
+    const n = L > 60 ? 4 : 1, fs = clamp(L * 0.16, 5, 34);
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.7) / (n + 0.4) - 0.5;
+      glyph('incendio', sx + Math.cos(rot) * t * L * 0.7, sy + Math.sin(rot) * t * L * 0.7, fs * (0.7 + h2(i, L | 0, 4) * 0.6));
+    }
+    glyph('fumaca', sx + Math.cos(rot) * L * 0.5, sy + Math.sin(rot) * L * 0.5, L * 1.6, rot);
+  } else if (fate === 'damaged' && L > 8) glyph('fumaca', sx + Math.cos(rot) * L * 0.2, sy + Math.sin(rot) * L * 0.2, L * 0.9, rot);
+  if (L > 40 && side === 'jp' && clsId === 'yamato') glyph('bandeira_jp', sx, sy, L * 0.22);
+}
+/* the deck band: what sits on top of a hull once one metre is a pixel or more.
+   Everything here is a slot, so a hand-painted flight deck, island or gun mount
+   drops straight in over the code drawing. */
+function shipDeck(sx, sy, rot, cls, L) {
+  if (!cls) return;
+  ctx.save(); ctx.translate(sx, sy); ctx.rotate(rot);
+  const B = Math.max(L * cls.b / cls.l, L * 0.07), m = L / cls.l;   // pixels per real metre
+  if (cls.fd) {
+    const fw = Math.max(B * 0.92, cls.fd.w * m);
+    tile('convoo', -L / 2, -fw / 2, L / 2, fw / 2, Math.max(6, 30 * m), 0.45);
+    const lifts = cls.fd.lf || 2;
+    for (let i = 0; i < lifts; i++) glyph('elevador', -L * 0.32 + i * L * 0.62 / Math.max(1, lifts - 1), 0, Math.max(5, 16 * m), Math.PI / 2);
+    const isl = cls.fd.i === 'p' ? -1 : 1;
+    if (cls.fd.i !== 'none') {
+      glyph('superestrutura', -L * 0.04, isl * fw * 0.42, Math.max(7, 26 * m), isl > 0 ? 0 : Math.PI);
+      glyph('chamine', L * 0.02, isl * fw * 0.52, Math.max(4, 11 * m), Math.PI / 2);
+    }
+    const air = Math.min(cls.ai, 24);                 // aircraft ranged aft, wings folded
+    for (let i = 0; i < air; i++) {
+      const row = i % 3, col = i / 3 | 0;
+      glyph(cls.nv === 'ijn' ? 'caca_jp' : 'caca_us', L * 0.36 - col * 12 * m, (row - 1) * fw * 0.26, 9 * m, Math.PI / 2);
+    }
+  } else {
+    tile('chapeamento', -L / 2, -B / 2, L / 2, B / 2, Math.max(5, 12 * m), 0.35);
+    glyph('superestrutura', -L * 0.06, 0, Math.max(8, cls.l * 0.14 * m));
+    const nf = cls.t === 'BB' || cls.t === 'CA' || cls.t === 'DD' ? 2 : 1;
+    for (let i = 0; i < nf; i++) glyph('chamine', L * (0.03 + i * 0.12), 0, Math.max(4, 12 * m), Math.PI / 2);
+    if (cls.ai > 0) {                                 // the catapult and floatplanes every cruiser carried
+      glyph('catapulta', L * 0.22, 0, Math.max(6, 20 * m), Math.PI / 2);
+      glyph('patrulha', L * 0.30, B * 0.3, Math.max(5, 11 * m), Math.PI / 2);
+    }
+    for (let i = 0; i < 4; i++) glyph('bote', L * (0.10 + (i % 2) * 0.07), (i < 2 ? -1 : 1) * B * 0.38, Math.max(3, 9 * m), Math.PI / 2);
+  }
+  for (const g of (cls.tu || [])) glyph('torre', -L / 2 + g.x * L, 0, Math.max(4, g.c * 1.5 * m), g.a ? 0 : Math.PI);
+  const naa = Math.min(28, Math.round(cls.l / 12));
+  for (let i = 0; i < naa; i++) {                     // the AA that grew all over everything after 1942
+    const t = (i + 0.5) / naa, side = i % 2 ? 1 : -1;
+    glyph('aa', -L / 2 + t * L, side * B * 0.42, Math.max(2.5, 6 * m), side > 0 ? 0 : Math.PI);
+  }
+  if (m > 2.2) {                                      // crew, once a man is two pixels across
+    const n = Math.min(70, Math.round(cls.cr / 40));
+    ctx.globalAlpha = 0.85;
+    for (let i = 0; i < n; i++) glyph('marinheiro', (h2(i, 7, cls.l | 0) - 0.5) * L * 0.85, (h2(i, 13, 3) - 0.5) * B * 0.8, Math.max(1.5, 1.8 * m));
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+function airAt(x, y, hdg, kind, side, n) {
+  const px = pxPerM(y), sx = sxOf(x), sy = syOf(y);
+  const id = kind === 'fighter' ? (side === 'jp' ? 'caca_jp' : 'caca_us')
+    : kind === 'dive' ? (side === 'jp' ? 'mergulho_jp' : 'mergulho_us')
+    : kind === 'torpedo' ? (side === 'jp' ? 'torpedeiro_jp' : 'torpedeiro_us')
+    : kind === 'kamikaze' ? 'kamikaze' : kind === 'scout' ? 'patrulha' : 'bombardeiro';
+  let L = (ASSET[id] ? ASSET[id].m : 13) * px; if (L > 1 && L < 9) L = 9; const rot = Math.PI / 2 + hdg * D2R;
+  if (L < 3) {                                        // a whole squadron reduced to one chevron
+    if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) return;
+    glyph('formacao', sx, sy, 26, rot);
+    return;
+  }
+  const cols = Math.min(n, 3), sep = L * 3.2;
+  for (let i = 0; i < n; i++) {                       // a vee of three-plane sections
+    const r = i / cols | 0, k = i % cols;
+    const ox = -r * sep * 1.1 - Math.abs(k - (cols - 1) / 2) * sep * 0.5, oy = (k - (cols - 1) / 2) * sep;
+    const ax = sx + Math.cos(rot) * ox - Math.sin(rot) * oy, ay = sy + Math.sin(rot) * ox + Math.cos(rot) * oy;
+    if (ax < -L || ax > W + L || ay < -L || ay > H + L) continue;
+    glyph(id, ax, ay, L, rot);
+    if (L > 26) { ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(ax + L * 0.5, ay + L * 0.5, L * 0.3, L * 0.1, rot, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+  }
+}
+
+/* ======================================================================
+   11. labels, with a simple no-overlap rule
+   ====================================================================== */
+let placed = [];
+function label(txt, ja, x, y, size, opt) {
+  opt = opt || {};
+  if (!showLabels && !opt.force) return false;
+  ctx.font = (opt.italic ? 'italic ' : '') + size + 'px Georgia, serif';
+  ctx.textAlign = opt.align || 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(txt).width, h = size * (ja ? 2.1 : 1.2);
+  const ax = opt.align === 'left' ? x + w / 2 : opt.align === 'right' ? x - w / 2 : x;
+  const r = [ax - w / 2 - 2, y - h / 2 - 1, ax + w / 2 + 2, y + h / 2 + 1];
+  if (r[2] < 0 || r[0] > W || r[3] < 0 || r[1] > H) return false;
+  if (!opt.force) for (const q of placed) if (!(r[2] < q[0] || r[0] > q[2] || r[3] < q[1] || r[1] > q[3])) return false;
+  placed.push(r);
+  ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2.5, size * 0.3);
+  ctx.strokeStyle = opt.halo || (STY === 'papel' ? 'rgba(233,224,198,0.85)' : 'rgba(10,20,28,0.8)');
+  ctx.fillStyle = opt.color || C.ink;
+  const yy = ja ? y - size * 0.55 : y;
+  ctx.strokeText(txt, x, yy); ctx.fillText(txt, x, yy);
+  if (ja) {
+    ctx.font = size * 0.92 + 'px "Yu Mincho","MS Mincho","Hiragino Mincho ProN",serif';
+    ctx.strokeText(ja, x, y + size * 0.62); ctx.fillText(ja, x, y + size * 0.62);
+  }
+  return true;
+}
+
+/* ======================================================================
+   12. the frame
+   ====================================================================== */
+let showFronts = true, showTracks = true, showBattles = true, showBases = true,
+    showLabels = true, showGrid = false, showDepth = true;
+function draw() {
+  const t0 = performance.now();
+  placed = [];
+  const mpp = mppTrue(), band = bandOf(mpp), mm = MPP();
+  const vx0 = cam.x - W / 2 / cam.s, vx1 = cam.x + W / 2 / cam.s;
+  const vy0 = cam.y - H / 2 / cam.s, vy1 = cam.y + H / 2 / cam.s;
+
+  /* --- the paper, then the sea --- */
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  tile('papel', 0, 0, W, H, Math.min(W, H) * 1.4);
+  const baseShown = !!BASE && mm > 1500;
+  if (baseShown) {
+    ctx.imageSmoothingEnabled = true;
+    const sx = sxOf(WIN.x0), sy = syOf(WIN.y0);
+    ctx.drawImage(BASE, sx, sy, (WIN.x1 - WIN.x0) * cam.s, (WIN.y1 - WIN.y0) * cam.s);
+  } else {
+    /* Close in, the depth is sampled into a small raster and blown back up with
+       the canvas doing the interpolation. Filling one rectangle per cell drew
+       the sampling grid itself — visible steps along every shelf edge — and
+       cost four times as much. Land is sampled too, at its shoal colour: the
+       vector coast covers it, and skipping it left a dark halo wherever the
+       grid and the coastline disagreed. */
+    const cell = 18, nw = Math.ceil(W / cell) + 1, nh = Math.ceil(H / cell) + 1;
+    if (!SEA || SEA.width !== nw || SEA.height !== nh) {
+      SEA = document.createElement('canvas'); SEA.width = nw; SEA.height = nh;
+      SEA_CTX = SEA.getContext('2d');
+      SEA_IMG = SEA_CTX.createImageData(nw, nh);
+    }
+    const px8 = SEA_IMG.data;
+    for (let j = 0; j < nh; j++) for (let i = 0; i < nw; i++) {
+      const x = cam.x + (i * cell - W / 2) / cam.s, y = cam.y + (j * cell - H / 2) / cam.s;
+      const c = rampRGB(isLand(x, y) ? 0 : depthM(x, y)), o = (j * nw + i) * 4;
+      px8[o] = c[0]; px8[o + 1] = c[1]; px8[o + 2] = c[2]; px8[o + 3] = 255;
+    }
+    SEA_CTX.putImageData(SEA_IMG, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(SEA, -cell / 2, -cell / 2, nw * cell, nh * cell);
+  }
+
+  /* --- swell: the trades set it running west in the tropics, the westerlies
+     east above 35°. The glyph is kept inside a pixel band rather than pinned
+     to a real wavelength: a literal 900 m crest would be wider than a carrier
+     at close range and would read as noise over the fleet. --- */
+  if (mm < 90000) {
+    const wpx = clamp(ASSET.vaga.m / mpp, 22, 84);
+    const gap = wpx * 2.3;
+    const a = smooth(90000, 40000, mm) * (mpp < 300 ? lerp(0.30, 1, smooth(2, 300, mpp)) : 1);
+    ctx.globalAlpha = a * 0.5;
+    const gw = gap / cam.s;
+    const i0 = Math.floor(vx0 / gw), i1 = Math.ceil(vx1 / gw), j0 = Math.floor(vy0 / gw), j1 = Math.ceil(vy1 / gw);
+    if ((i1 - i0) * (j1 - j0) < 9000) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const gx = (i + h2(i, j, 5) * 0.8) * gw, gy = (j + h2(i, j, 9) * 0.8) * gw;
+      if (isLand(gx, gy) || landKm(gx, gy) < 4) continue;
+      const lat = latOf(gy), sw = Math.abs(lat) < 30 ? 1.9 : Math.abs(lat) < 45 ? 0.5 : 0.9;   // swell bearing
+      const rot = sw + (fbm(gx / 4e5, gy / 4e5, 3) - 0.5) * 0.5;
+      glyph('vaga', sxOf(gx), syOf(gy), wpx, rot - 1.9);
+      if (h2(i, j, 21) < 0.10) glyph('carneiro', sxOf(gx) + wpx * 0.2, syOf(gy) - wpx * 0.12, wpx * 0.3, rot);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- the grain of the water, over the depth wash. The shallow tile is
+     clipped to the cells that really are shallow, or it would paint the whole
+     abyssal plain the colour of a lagoon. --- */
+  if (mm < 60000) {
+    const a = smooth(60000, 25000, mm);
+    tile('mar', 0, 0, W, H, clamp(ASSET.mar.m / mpp, 110, 300), a * 0.20);
+    /* the shoal wash is clipped to where the water really is shallow. The clip
+       is built from circles rather than squares: a grid of rectangles reads as
+       a grid, which is the one thing a sea chart must never look like. */
+    const cell = 18;
+    let any = false;
+    ctx.save(); ctx.beginPath();
+    for (let j = -cell; j < H + cell; j += cell) for (let i = -cell; i < W + cell; i += cell) {
+      const x = cam.x + (i - W / 2) / cam.s, y = cam.y + (j - H / 2) / cam.s;
+      if (isLand(x, y) || depthM(x, y) > 160) continue;
+      ctx.moveTo(i + cell, j); ctx.arc(i, j, cell, 0, TAU); any = true;
+    }
+    if (any) { ctx.clip(); tile('mar_raso', 0, 0, W, H, clamp(ASSET.mar_raso.m / mpp, 100, 260), a * 0.4); }
+    ctx.restore();
+  }
+
+  /* --- the isobaths, traced out of the depth field by marching squares.
+     Each cell yields at most one segment, and every segment is a separate
+     stamp, so the grid is deliberately coarse: three lines that read as
+     contours beat five that cost forty milliseconds. --- */
+  if (showDepth && mm > 2500) {
+    const cell = 42, nx = Math.ceil(W / cell) + 1, ny = Math.ceil(H / cell) + 1;
+    if (nx * ny < 4000) {
+      const g = new Float32Array(nx * ny);
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        const x = cam.x + (i * cell - W / 2) / cam.s, y = cam.y + (j * cell - H / 2) / cam.s;
+        g[j * nx + i] = isLand(x, y) ? -1 : depthM(x, y);
+      }
+      const LV = [200, 4000];
+      for (let li = 0; li < LV.length; li++) {
+        const lvl = LV[li];
+        ctx.globalAlpha = li === 0 ? 0.6 : 0.3;
+        let drawn = 0;
+        for (let j = 0; j + 1 < ny && drawn < 240; j++) for (let i = 0; i + 1 < nx; i++) {
+          const a = g[j * nx + i], b = g[j * nx + i + 1], c = g[(j + 1) * nx + i + 1], d = g[(j + 1) * nx + i];
+          if (a < 0 || b < 0 || c < 0 || d < 0) continue;
+          const lo = a < b ? (a < c ? (a < d ? a : d) : (c < d ? c : d)) : (b < c ? (b < d ? b : d) : (c < d ? c : d));
+          const hi = a > b ? (a > c ? (a > d ? a : d) : (c > d ? c : d)) : (b > c ? (b > d ? b : d) : (c > d ? c : d));
+          if (lvl < lo || lvl > hi) continue;          // the whole cell is on one side
+          const x0 = i * cell, y0 = j * cell, x1 = x0 + cell, y1 = y0 + cell;
+          ISO.length = 0;
+          if ((a < lvl) !== (b < lvl)) { const t = (lvl - a) / (b - a); ISO.push(x0 + cell * t, y0); }
+          if ((b < lvl) !== (c < lvl)) { const t = (lvl - b) / (c - b); ISO.push(x1, y0 + cell * t); }
+          if ((c < lvl) !== (d < lvl)) { const t = (lvl - c) / (d - c); ISO.push(x1 - cell * t, y1); }
+          if ((d < lvl) !== (a < lvl)) { const t = (lvl - d) / (a - d); ISO.push(x0, y1 - cell * t); }
+          if (ISO.length < 4) continue;
+          ISO.length = 4;
+          stamp('isobata', ISO, cell * 1.7, cell * 1.7);
+          drawn++;
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  /* --- soundings, the furniture of a real chart --- */
+  if (showDepth && mm > 900) {
+    ctx.globalAlpha = 0.5;
+    const step = mm > 40000 ? 5 : 3;
+    ctx.font = Math.max(8, Math.min(11, 1400 / mpp * 90)) + 'px Georgia, serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = STY === 'papel' ? 'rgba(40,70,90,0.6)' : 'rgba(150,190,215,0.55)';
+    const gp = 64 * step;
+    for (let j = 0; j < H; j += gp) for (let i = 0; i < W; i += gp) {
+      const x = cam.x + (i - W / 2) / cam.s, y = cam.y + (j - H / 2) / cam.s;
+      if (isLand(x, y)) continue;
+      const d = depthM(x, y); if (d < 30) continue;
+      const im = A('sonda');
+      if (im) drawSprite(im, i, j, 34, 'center');
+      else ctx.fillText(Math.round(d / 10) * 10, i, j);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- the land --- */
+  const deep = mpp < 400, green = [];
+  const margin = 40;
+  for (const r of COAST) {
+    if (r.x1 < vx0 || r.x0 > vx1 || r.y1 < vy0 || r.y0 > vy1) continue;
+    const wpx = (r.x1 - r.x0) * cam.s;
+    if (wpx < 0.8 && (r.y1 - r.y0) * cam.s < 0.8) continue;
+    /* zoomed out, most of a ring's vertices land on the same pixel: stepping
+       over them is the difference between projecting 125.000 points and 20.000 */
+    const stride = Math.max(1, Math.min(24, Math.round(0.7 / Math.max(1e-9, r.seg * cam.s)))) * 2;
+    const np = r.p.length;
+    SCR.length = 0;
+    for (let i = 0; i < np; i += stride) SCR.push(sxOf(r.p[i]), syOf(r.p[i + 1]));
+    if (stride > 2) SCR.push(sxOf(r.p[0]), syOf(r.p[1]));
+    let poly = (r.x0 < vx0 || r.x1 > vx1 || r.y0 < vy0 || r.y1 > vy1) ? clipPoly(SCR, -margin, -margin, W + margin, H + margin) : SCR;
+    if (poly.length < 6) continue;
+    if (deep) poly = inked(poly, clamp(60 / mpp, 0, 2.6), 9);
+    ctx.beginPath(); ctx.moveTo(poly[0], poly[1]);
+    for (let i = 2; i < poly.length; i += 2) ctx.lineTo(poly[i], poly[i + 1]);
+    ctx.closePath();
+    if (r.h) { ctx.fillStyle = C.sea0; ctx.fill(); continue; }
+    // over the base raster the land already carries its hypsometric wash, so the
+    // vector fill only firms up the edges; past the raster it becomes the land
+    ctx.globalAlpha = baseShown ? 0.30 : 1;
+    ctx.fillStyle = C.land; ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.shore; ctx.lineWidth = mpp < 1200 ? 1.4 : 0.8; ctx.stroke();
+    if (mpp < 140) green.push(poly.slice());          // tiled once at the end, not once per island (a copy: poly is a shared buffer)
+    if (mpp < 400) stamp('rebentacao', poly, Math.max(3, ASSET.rebentacao.m / mpp), Math.max(4, ASSET.rebentacao.m / mpp));
+    if (mpp < 90) { ctx.globalAlpha = smooth(90, 40, mpp) * 0.85; stamp('praia', poly, Math.max(4, ASSET.praia.m / mpp), Math.max(5, ASSET.praia.m / mpp * 0.8)); ctx.globalAlpha = 1; }
+  }
+  /* the jungle: one clip over every island on screen and one pass of the tile.
+     Per island it was a full-screen fill each, and twenty islands cost 100 ms. */
+  if (green.length) {
+    ctx.save(); ctx.beginPath();
+    for (const poly of green) { ctx.moveTo(poly[0], poly[1]); for (let i = 2; i < poly.length; i += 2) ctx.lineTo(poly[i], poly[i + 1]); ctx.closePath(); }
+    ctx.clip();
+    tile('selva', 0, 0, W, H, Math.max(10, ASSET.selva.m / mpp), smooth(140, 60, mpp) * 0.8);
+    ctx.restore();
+  }
+  /* the fringing reef. Kept to water that is genuinely reef — a few fathoms and
+     within sight of a beach — because the whole continental shelf drawn as coral
+     is just a grid of blobs over half the Philippines. */
+  if (mpp > 4 && mpp < 700) {
+    const gp = Math.max(14, 2600 / mpp);
+    ctx.globalAlpha = smooth(700, 300, mpp) * smooth(4, 12, mpp) * 0.85;
+    for (let j = 0; j < H; j += gp) for (let i = 0; i < W; i += gp) {
+      if (h2(i / gp | 0, j / gp | 0, 23) > 0.55) continue;
+      const x = cam.x + (i - W / 2) / cam.s, y = cam.y + (j - H / 2) / cam.s;
+      if (isLand(x, y)) continue;
+      if (depthM(x, y) > 40 || landKm(x, y) > 10) continue;
+      glyph('recife', i + (h2(i, j, 5) - 0.5) * gp * 0.5, j + (h2(i, j, 9) - 0.5) * gp * 0.5, gp * 1.2);
+    }
+    ctx.globalAlpha = 1;
+  }
+  /* island relief, in side view, the way a pictorial chart shows an island */
+  if (mpp > 60 && mpp < 9000) {
+    const gp = Math.max(38, 9000 / mpp * 3);
+    ctx.globalAlpha = smooth(9000, 5000, mpp) * smooth(60, 130, mpp);
+    for (let j = 0; j < H; j += gp) for (let i = 0; i < W; i += gp) {
+      const x = cam.x + (i - W / 2) / cam.s, y = cam.y + (j - H / 2) / cam.s;
+      const e = elevM(x, y); if (e < 220) continue;
+      const hgt = clamp(e / mpp * 3.2, 8, 90), wid = hgt * 2.3;
+      glyph(e > 1800 && h2(i, j, 3) < 0.2 ? 'vulcao' : 'monte', i, j + hgt * 0.2, wid, 0, hgt);
+    }
+    ctx.globalAlpha = 1;
+  }
+  /* palms along the beach, once a tree is worth more than a few pixels. The
+     grid follows the tree's own size: spacing it any tighter buys thousands of
+     two-pixel smudges and nothing you can see. */
+  if (mpp < 6) {
+    const gp = Math.max(16, ASSET.palmeira.m / mpp * 2.4);
+    ctx.globalAlpha = smooth(6, 2.5, mpp);
+    for (let j = 0; j < H; j += gp) for (let i = 0; i < W; i += gp) {
+      const k = h2(i / gp | 0, j / gp | 0, 11);
+      if (k > 0.5) continue;
+      const x = cam.x + (i - W / 2) / cam.s, y = cam.y + (j - H / 2) / cam.s;
+      if (!isLand(x, y)) continue;
+      const near = elevM(x, y) < 120;
+      glyph(near ? 'palmeira' : 'arvore', i + (k - 0.25) * gp, j + (h2(i | 0, j | 0, 2) - 0.5) * gp, (near ? 14 : 22) / mpp, (h2(i | 0, j | 0, 6) - 0.5) * 0.5);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- the great currents, which every convoy planner had to allow for --- */
+  if (mm > 12000 && mm < 3e6) {
+    ctx.globalAlpha = 0.5;
+    for (const cu of CURRENTS) {
+      const pts = [];
+      for (let i = 0; i < cu.p.length; i += 2) { const q = toXY(cu.p[i + 1], cu.p[i]); pts.push(sxOf(q[0]), syOf(q[1])); }
+      stamp('corrente', pts, clamp(ASSET.corrente.m / mpp, 40, 260), clamp(ASSET.corrente.m / mpp, 40, 260));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- the graticule and the date line --- */
+  if (showGrid) {
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+    const stepDeg = mm > 3e6 ? 20 : mm > 8e5 ? 10 : mm > 2e5 ? 5 : mm > 4e4 ? 1 : mm > 8e3 ? 0.25 : 0.05;
+    const l0 = Math.floor(lonOf(vx0) / stepDeg) * stepDeg, l1 = Math.ceil(lonOf(vx1) / stepDeg) * stepDeg;
+    for (let lo = l0; lo <= l1; lo += stepDeg) { const sx = sxOf(toXY(0, lo)[0]); ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke(); }
+    const a0 = Math.floor(latOf(vy1) / stepDeg) * stepDeg, a1 = Math.ceil(latOf(vy0) / stepDeg) * stepDeg;
+    for (let la = a0; la <= a1; la += stepDeg) { const sy = syOf(toXY(la, LON0)[1]); ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke(); }
+    for (let lo = l0; lo <= l1; lo += stepDeg) for (let la = a0; la <= a1; la += stepDeg)
+      glyph('meridiano', sxOf(toXY(0, lo)[0]), syOf(toXY(la, LON0)[1]), clamp(ASSET.meridiano.m / mpp, 14, 40));
+  }
+  { const sx = sxOf(toXY(0, 180)[0]); if (sx > -50 && sx < W + 50) stamp('linha_data', [sx, 0, sx, H], Math.min(240, H), Math.min(240, H)); }
+
+  /* --- the perimeter of Japanese control on this day --- */
+  if (showFronts && mm > 4000) {
+    const f = frontAt(today);
+    if (f) {
+      const pts = [];
+      for (let i = 0; i < f.p.length; i += 2) pts.push(sxOf(f.p[i]), syOf(f.p[i + 1]));
+      ctx.beginPath(); ctx.moveTo(pts[0], pts[1]);
+      for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(208,64,48,0.11)'; ctx.fill();
+      stamp('perimetro', pts.concat([pts[0], pts[1]]), Math.max(14, ASSET.perimetro.m / mpp * 0.4), Math.max(16, ASSET.perimetro.m / mpp * 0.4));
+    }
+  }
+
+  /* --- the routes --- */
+  if (showTracks) for (const t of HI.tracks) {
+    const live = trackLive(t), past = t.d0 != null && today > t.d0;
+    if (!past && !live) continue;
+    ctx.globalAlpha = live ? 0.95 : 0.30;
+    ctx.strokeStyle = t.s === 'jp' ? C.jp : C.us;
+    ctx.lineWidth = live ? 2 : 1.2; ctx.setLineDash(t.k === 'submarine' ? [7, 5] : t.k === 'air' ? [2, 4] : []);
+    ctx.beginPath(); ctx.moveTo(sxOf(t.p[0]), syOf(t.p[1]));
+    for (let i = 2; i < t.p.length; i += 2) ctx.lineTo(sxOf(t.p[i]), syOf(t.p[i + 1]));
+    ctx.stroke(); ctx.setLineDash([]);
+    const n = t.p.length;
+    const a = Math.atan2(t.p[n - 1] - t.p[n - 3], t.p[n - 2] - t.p[n - 4]);
+    glyph(t.s === 'jp' ? 'seta_jp' : 'seta_us', sxOf(t.p[n - 2]), syOf(t.p[n - 1]), clamp(ASSET.seta_jp.m / mpp, 9, 26), a);
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- the battles, and the wrecks they left --- */
+  if (showBattles) for (const b of HI.battles) {
+    if (!seenBattle(b)) continue;
+    const sx = sxOf(b.x), sy = syOf(b.y);
+    if (sx < -160 || sx > W + 160 || sy < -160 || sy > H + 160) continue;
+    const fresh = today - b.d0 < 30;
+    /* the hulls that stayed there: one mark per warship lost, scattered over the
+       few miles the action covered, and only close enough in to mean anything */
+    const lost = ((b.lj || '') + ' ' + (b.la || '')).match(/\d+/g);
+    if (mpp < 900 && lost) {
+      let n = 0; for (const q of lost) n += +q;
+      n = Math.min(n, 8);
+      ctx.globalAlpha = 0.7;
+      for (let i = 0; i < n; i++) {
+        const rr = 6000 / mpp * (0.4 + h2(i, 3, b.d0 | 0));
+        glyph('naufragio', sx + (h2(i, 7, 1) - 0.5) * rr * 9, sy + (h2(i, 11, 2) - 0.5) * rr * 9, clamp(ASSET.naufragio.m / mpp, 9, 60));
+      }
+      ctx.globalAlpha = 1;
+    }
+    const sz = clamp(ASSET.batalha.m / mpp, 13, 15 + b.sc * 9) * (fresh ? 1.25 : 1);
+    ctx.globalAlpha = fresh ? 1 : 0.62;
+    glyph(b.k === 'air' || b.k === 'raid' ? 'batalha_ar' : b.k === 'sub' ? 'batalha_sub' : b.k === 'amphib' ? 'desembarque' : 'batalha', sx, sy, sz);
+    ctx.globalAlpha = 1;
+    if (b.sc >= (mm > 2e6 ? 3 : mm > 4e5 ? 2 : 1)) label(b.pt, '', sx, sy - sz * 0.75, clamp(9 + b.sc * 1.6, 9, 15), { color: '#e9c97a' });
+  }
+
+  /* --- the bases --- */
+  if (showBases) for (const p of HI.bases) {
+    if (p.a != null && today < p.a) continue;
+    const sx = sxOf(p.x), sy = syOf(p.y);
+    if (sx < -40 || sx > W + 40 || sy < -40 || sy > H + 40) continue;
+    if (p.z < (mm > 2e6 ? 4 : mm > 6e5 ? 3 : mm > 1e5 ? 2 : 1)) continue;
+    const sz = clamp(ASSET.base_jp.m / mpp, 11, 13 + p.z * 5);
+    const id = p.k === 'strait' ? 'estreito' : p.k === 'airfield' ? 'aerodromo' : p.k === 'arsenal' ? 'arsenal'
+      : p.k === 'anchorage' ? 'ancoradouro' : p.s === 'jp' ? 'base_jp' : p.s === 'us' ? 'base_us' : 'base_al';
+    /* close in, a base stops being a symbol and becomes a place: a strip, a
+       jetty, a few roofs, and the ensign of whoever held it that day */
+    if (mpp < 220 && p.k !== 'strait' && p.k !== 'sea') {
+      const scale = 1 / mpp;
+      if (p.k === 'airfield' || p.k === 'navalbase' || p.z >= 3) glyph('pista', sx, sy - 30 * scale * 18, ASSET.pista.m * scale, h2(p.x | 0, p.y | 0, 3) * 3);
+      glyph('vila', sx + 22 * scale * 12, sy + 14 * scale * 12, ASSET.vila.m * scale);
+      if (p.k !== 'airfield') glyph('cais', sx - 18 * scale * 12, sy + 8 * scale * 12, ASSET.cais.m * scale, h2(p.x | 0, p.y | 0, 8) * 3);
+      glyph(p.s === 'jp' ? 'bandeira_jp' : p.s === 'us' ? 'bandeira_us' : 'bandeira_al', sx, sy - 46 * scale * 18, clamp(ASSET.bandeira_jp.m * scale, 12, 46));
+    } else glyph(id, sx, sy, sz);
+    label(p.pt, mm < 3e5 ? p.ja : '', sx, sy + sz * 0.85, clamp(8 + p.z * 1.3, 9, 14));
+  }
+
+  /* --- named waters, in the old chart's italics --- */
+  if (showLabels && mm > 2500) for (const s of HI.seas) {
+    const sx = sxOf(s.x), sy = syOf(s.y);
+    const size = clamp(s.w * 111320 / mpp * 0.05, 10, 30);
+    if (size < 10) continue;
+    ctx.globalAlpha = 0.55;
+    label(s.pt.toUpperCase(), '', sx, sy, size, { italic: true, color: STY === 'papel' ? '#41637a' : '#9fc3d8' });
+    ctx.globalAlpha = 1;
+  }
+
+  /* --- the fleets --- */
+  drawFleets(mpp, band);
+
+  /* --- the compass rose, bottom left of the open sea --- */
+  if (mm > 2500) { const sz = clamp(ASSET.rosa.m / mpp, 84, 240); ctx.globalAlpha = 0.8; glyph('rosa', W - sz * 0.60, H - sz * 0.72, sz); ctx.globalAlpha = 1; }
+
+  lastFrameMs = performance.now() - t0;
+  hud(mpp, band);
+}
+
+/* the four set-piece actions are drawn ship by ship; every other force on the
+   map is a formation generated around its position on its route today */
+function drawFleets(mpp, band) {
+  const px = pxPerM(cam.y);
+  const vx0 = cam.x - W / 2 / cam.s, vx1 = cam.x + W / 2 / cam.s;
+  const vy0 = cam.y - H / 2 / cam.s, vy1 = cam.y + H / 2 / cam.s;
+  for (const a of HI.actions) {
+    /* against the action's own bounding box, not its centre point: at Midway the
+       two fleets are 200 miles apart, so a camera parked on the Kaga is nowhere
+       near the nominal centre and the whole battle would be culled away */
+    if (a.bb === undefined) {
+      let x0 = 1e18, y0 = 1e18, x1 = -1e18, y1 = -1e18;
+      for (const q of a.u.concat(a.a)) { if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x; if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; }
+      a.bb = a.u.length ? [x0, y0, x1, y1] : null;
+    }
+    const pad = 30 / cam.s;
+    const near = a.bb && !(a.bb[2] + pad < vx0 || a.bb[0] - pad > vx1 || a.bb[3] + pad < vy0 || a.bb[1] - pad > vy1);
+    const sx = sxOf(a.x), sy = syOf(a.y);
+    if (mpp > 900) {                                  // a cartouche at chart scale
+      if (sx > -80 && sx < W + 80 && sy > -80 && sy < H + 80 && today >= a.d) {
+        glyph('batalha', sx, sy, clamp(ASSET.batalha.m / mpp, 16, 42));
+        label(a.pt, '', sx, sy - 22, 13, { color: '#e9c97a' });
+      }
+      continue;
+    }
+    if (!near) continue;
+    for (const u of a.u) shipAt(u.x, u.y, u.h, u.c, u.s, u.f);
+    for (const g of a.a) airAt(g.x, g.y, g.h, g.k, g.s, g.n);
+    if (today === a.d) combat(a, mpp);
+    if (mpp < 90 && showLabels) for (const u of a.u) {
+      const L = (SHIPS[u.c] ? SHIPS[u.c].l : 110) * pxPerM(u.y);
+      if (L < 14) continue;
+      label(u.n, '', sxOf(u.x), syOf(u.y) + L * 0.45, clamp(L * 0.13, 8, 13), { color: u.s === 'jp' ? '#f0b0a4' : '#a8ccee' });
+    }
+  }
+  /* forces under way: one formation per live route */
+  for (const t of HI.tracks) {
+    if (!trackLive(t)) continue;
+    const p = trackPos(t), hdg = (Math.atan2(p[0] - cam.x, -(p[1] - cam.y)) * 0 + (p[2] * 180 / Math.PI + 90) + 360) % 360;
+    const sx = sxOf(p[0]), sy = syOf(p[1]);
+    if (sx < -400 || sx > W + 400 || sy < -400 || sy > H + 400) continue;
+    const roster = FLEET[t.k] || FLEET.surface, tbl = CLASS_FOR[t.s === 'jp' ? 'jp' : 'us'];
+    if (t.k === 'carrier' && mpp > 300 && mpp < 40000) {
+      // the dawn search: seven sectors out to about 300 miles, which is how far
+      // a float plane could look and how these battles were actually opened
+      ctx.globalAlpha = 0.4;
+      const reach = 300 * NM / kAt(p[1]) * cam.s;
+      for (let i = 0; i < 7; i++) {
+        const ang = p[2] + (i - 3) * 0.30;
+        stamp('busca', [sx, sy, sx + Math.cos(ang) * reach, sy + Math.sin(ang) * reach], clamp(ASSET.busca.m / mpp, 40, 200), clamp(ASSET.busca.m / mpp, 40, 200));
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (mpp > 700) {                                  // one symbol for the whole force
+      glyph(t.s === 'jp' ? 'seta_jp' : 'seta_us', sx, sy, clamp(ASSET.seta_jp.m / mpp, 12, 30), p[2]);
+      if (mpp < 6000) label(t.pt, '', sx, sy - 16, 11, { color: t.s === 'jp' ? '#f0b0a4' : '#a8ccee' });
+      continue;
+    }
+    const k = 1 / kAt(p[1]);
+    for (let i = 0; i < roster.length; i++) {
+      const st = station(i, t.k);
+      const co = Math.cos(p[2]), si = Math.sin(p[2]);
+      const ox = (st[0] * co - st[1] * si) * NM * k, oy = (st[0] * si + st[1] * co) * NM * k;
+      shipAt(p[0] + ox, p[1] + oy, hdg, tbl[roster[i]] || tbl.dd, t.s === 'jp' ? 'jp' : 'us', '');
+    }
+    if (mpp < 400 && showLabels) label(t.pt, '', sx, sy - 40, 12, { color: t.s === 'jp' ? '#f0b0a4' : '#a8ccee' });
+  }
+}
+
+/* what an action looks like on the day it is fought: near misses walking up to
+   a ship, flak over the formation, torpedo tracks between the two lines, and
+   searchlights if it was fought in the dark. All hashed off each ship's own
+   position, so the picture is the same every time you come back to it. */
+const NIGHT = { surigao: 1 };
+function combat(a, mpp) {
+  if (mpp > 260) return;
+  const px = pxPerM(a.y), night = NIGHT[a.id];
+  for (const u of a.u) {
+    const cls = SHIPS[u.c], L = (cls ? cls.l : 110) * px;
+    if (L < 3) continue;
+    const sx = sxOf(u.x), sy = syOf(u.y);
+    if (sx < -200 || sx > W + 200 || sy < -200 || sy > H + 200) continue;
+    const rot = Math.PI / 2 + u.h * D2R;
+    const hot = u.f === 'sunk' ? 5 : u.f === 'damaged' ? 3 : u.r === 'flag' || u.r === 'carrier' ? 2 : 1;
+    for (let i = 0; i < hot; i++) {                   // shell splashes straddling her
+      const ang = h2(u.x | 0, i, 3) * TAU, r = L * (0.7 + h2(u.x | 0, i, 7) * 1.4);
+      glyph('coluna', sx + Math.cos(ang) * r, sy + Math.sin(ang) * r, clamp(ASSET.coluna.m * px, 4, 90));
+    }
+    if (u.f) glyph('explosao', sx + (h2(u.x | 0, 1, 9) - 0.5) * L * 0.5, sy + (h2(u.y | 0, 2, 9) - 0.5) * L * 0.5, clamp(ASSET.explosao.m * px, 6, 120));
+    if (hot > 1) for (let i = 0; i < 6; i++)           // the flak umbrella over the formation
+      glyph('flak', sx + (h2(u.x | 0, i, 11) - 0.5) * L * 5, sy + (h2(u.y | 0, i, 13) - 0.5) * L * 5, clamp(ASSET.flak.m * px, 3, 60));
+    if (cls && (cls.t === 'BB' || cls.t === 'CA') && (cls.tu || []).length) {
+      for (const g of cls.tu) {                       // the muzzle flash of a full broadside
+        const d = (g.a ? 1 : -1) * L * 0.55, oy = (g.a ? -1 : 1) * L * 0.09;
+        glyph('fogo', sx + Math.cos(rot) * (-g.x * L + L / 2 + d * 0.2) + Math.sin(rot) * oy, sy + Math.sin(rot) * (-g.x * L + L / 2 + d * 0.2) - Math.cos(rot) * oy, clamp(ASSET.fogo.m * px, 4, 60), rot + (g.a ? 0 : Math.PI) + 1.4);
+      }
+    }
+    if (cls && (cls.t === 'DD' || cls.t === 'PT') && L > 5) {   // torpedoes, run out abeam
+      const ta = rot + (u.s === 'jp' ? -1 : 1) * Math.PI / 2, tl = clamp(ASSET.torpedo.m * px, 30, 900);
+      ctx.globalAlpha = 0.7;
+      stamp('torpedo', [sx, sy, sx + Math.cos(ta) * tl, sy + Math.sin(ta) * tl], Math.min(tl, 120), Math.min(tl, 120));
+      ctx.globalAlpha = 1;
+    }
+    if (night && (u.r === 'flag' || u.r === 'battleship')) {
+      const ba = rot + Math.PI / 2 + (h2(u.x | 0, 4, 5) - 0.5) * 0.6;
+      glyph('holofote', sx, sy, clamp(ASSET.holofote.m * px, 60, 1400), ba);
+    }
+  }
+  for (const g of a.a) {                              // bombs, on their way down
+    if (g.k !== 'dive' && g.k !== 'torpedo') continue;
+    const sx = sxOf(g.x), sy = syOf(g.y), rot = Math.PI / 2 + g.h * D2R;
+    for (let i = 0; i < Math.min(g.n, 6); i++)
+      glyph('bomba', sx + (h2(g.x | 0, i, 2) - 0.5) * 120, sy + (h2(g.y | 0, i, 6) - 0.5) * 120, clamp(ASSET.bomba.m * px, 2, 26), rot);
+  }
+}
+
+/* the two currents a Pacific navigator actually had to plan around */
+const CURRENTS = [
+  { n: 'Kuroshio', p: [122, 22, 125, 26, 130, 30, 136, 33, 141, 35, 146, 36, 155, 38, 168, 40] },
+  { n: 'Corrente Equatorial Norte', p: [200, 14, 185, 13, 170, 12, 155, 11, 140, 11, 128, 12] },
+  { n: 'Contracorrente Equatorial', p: [130, 6, 145, 5, 160, 5, 175, 6, 190, 6, 205, 7] },
+  { n: 'Corrente de Oyashio', p: [160, 52, 152, 46, 146, 41, 143, 38] },
+  { n: 'Corrente Equatorial Sul', p: [200, -10, 185, -11, 170, -12, 155, -12, 145, -11] },
+];
+
+/* ======================================================================
+   13. the readout
+   ====================================================================== */
+const $ = id => document.getElementById(id);
+function hud(mpp, band) {
+  const NMI = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+  let pick = NMI[0];
+  for (const n of NMI) if (n * NM / mpp < W * 0.24) pick = n;
+  $('bar').style.width = Math.round(pick * NM / mpp) + 'px';
+  $('barTxt').textContent = pick < 1 ? (pick * 10) + ' cabos' : pick + ' mn';
+  const lat = latOf(cam.y), lon = lonOf(cam.x);
+  const lo = ((lon + 180) % 360) - 180;
+  $('pos').textContent = Math.abs(lat).toFixed(2) + '° ' + (lat >= 0 ? 'N' : 'S') + '  ' + Math.abs(lo).toFixed(2) + '° ' + (lo >= 0 ? 'E' : 'W');
+  $('band').textContent = band.pt + ' · ' + (mpp > 1000 ? (mpp / 1000).toFixed(1) + ' km/px' : mpp > 1 ? mpp.toFixed(1) + ' m/px' : (mpp * 100).toFixed(0) + ' cm/px');
+}
+function legend() {
+  const rows = [['#d04030', 'Japão'], ['#4a86c8', 'Estados Unidos'], ['#5aa06a', 'aliados'], ['#e2a23a', 'batalha']];
+  $('legend').innerHTML = rows.map(r => '<div><i style="background:' + r[0] + '"></i>' + r[1] + '</div>').join('');
+}
+
+/* ======================================================================
+   14. the asset sheet
+   ----------------------------------------------------------------------
+   Every slot in ASSETS gets a card. The preview is drawn with the very same
+   code the map uses, so what you see is what you are replacing; dropping a
+   PNG on the card (or on the page, named after the slot) swaps it live.
+   ====================================================================== */
+let sheetOn = false;
+const slotCanvas = {};
+function paintSlot(id) {
+  const cv = slotCanvas[id]; if (!cv) return;
+  const a = ASSET[id], g = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  g.clearRect(0, 0, w, h);
+  const old = ctx; ctx = g;
+  const im = A(id);
+  const box = Math.min(w, h) * 0.82;
+  g.save(); g.translate(w / 2, h / 2);
+  try {
+    if (a.k === 'tile') {
+      g.translate(-w / 2, -h / 2);
+      if (im) { const p = g.createPattern(im, 'repeat'); const k = (box / 2) / im.naturalWidth; g.save(); g.scale(k, k); g.fillStyle = p; g.fillRect(0, 0, w / k, h / k); g.restore(); }
+      else { const n = 2, s = w / n; for (let j = 0; j < Math.ceil(h / s); j++) for (let i = 0; i < n; i++) { g.save(); g.translate(i * s + s / 2, j * s + s / 2); DRAW[id](s, s); g.restore(); } }
+    } else if (im) {
+      const k = box / Math.max(im.naturalWidth, im.naturalHeight);
+      g.drawImage(im, -im.naturalWidth * k / 2, -im.naturalHeight * k / 2, im.naturalWidth * k, im.naturalHeight * k);
+    } else if (DRAW[id]) {
+      if (a.k === 'line') { g.translate(-box / 2, 0); DRAW[id](box, box * 0.4); g.translate(box, 0); }
+      else DRAW[id](box, box * 0.62);
+    }
+  } catch (e) { /* a painter that dislikes a degenerate size must not kill the sheet */ }
+  g.restore();
+  ctx = old;
+  const el = cv.parentElement;
+  if (el) el.classList.toggle('mine', !!MINE[id]);
+  $('shCount').textContent = Object.keys(MINE).length + ' de ' + ASSETS.length + ' trocados';
+}
+function buildSheet() {
+  const grid = $('grid'); grid.innerHTML = '';
+  const groups = [];
+  for (const a of ASSETS) { if (!groups.length || groups[groups.length - 1].g !== a.g) groups.push({ g: a.g, items: [] }); groups[groups.length - 1].items.push(a); }
+  for (const gr of groups) {
+    const h = document.createElement('div'); h.className = 'grp'; h.style.gridColumn = '1 / -1';
+    h.textContent = gr.g + '  (' + gr.items.length + ')';
+    grid.appendChild(h);
+    for (const a of gr.items) {
+      const d = document.createElement('div'); d.className = 'slot'; d.dataset.id = a.id;
+      const cv = document.createElement('canvas'); cv.width = 240; cv.height = 184;
+      cv.title = 'clique para baixar este desenho em PNG e pintar por cima';
+      d.appendChild(cv);
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = a.pt; d.appendChild(nm);
+      const idl = document.createElement('div'); idl.className = 'id'; idl.textContent = a.id + '.png'; d.appendChild(idl);
+      const ops = document.createElement('div'); ops.className = 'ops';
+      const b1 = document.createElement('button'); b1.textContent = '↺'; b1.title = 'voltar ao desenho em código';
+      b1.onclick = e => { e.stopPropagation(); clearAsset(a.id); };
+      ops.appendChild(b1); d.appendChild(ops);
+      cv.onclick = () => exportSlotPNG(a.id);
+      grid.appendChild(d);
+      slotCanvas[a.id] = cv;
+    }
+  }
+  for (const a of ASSETS) paintSlot(a.id);
+}
+/* the download is a transparent PNG at the slot's natural aspect, so it drops
+   straight back in as a replacement once it has been painted over */
+function exportSlotPNG(id) {
+  const a = ASSET[id];
+  const size = 256, cv = document.createElement('canvas');
+  cv.width = size; cv.height = a.an === 'bottom' ? Math.round(size * 0.7) : a.k === 'line' ? Math.round(size * 0.4) : size;
+  const g = cv.getContext('2d'), old = ctx; ctx = g;
+  g.save(); g.translate(cv.width / 2, cv.height / 2);
+  try {
+    if (a.k === 'tile') { g.translate(-cv.width / 2, -cv.height / 2); g.translate(cv.width / 2, cv.height / 2); DRAW[id] && DRAW[id](cv.width, cv.height); }
+    else if (a.k === 'line') { g.translate(-cv.width / 2, 0); DRAW[id] && DRAW[id](cv.width, cv.height); }
+    else if (DRAW[id]) { if (a.an === 'bottom') g.translate(0, cv.height / 2 - 2); DRAW[id](cv.width * 0.9, cv.height * 0.9); }
+  } catch (e) { }
+  g.restore(); ctx = old;
+  const a2 = document.createElement('a'); a2.download = id + '.png'; a2.href = cv.toDataURL('image/png'); a2.click();
+}
+function fileToSlot(file, forceId) {
+  const id = forceId || file.name.replace(/\.[a-z0-9]+$/i, '');
+  if (!ASSET[id]) return false;
+  const fr = new FileReader();
+  fr.onload = () => setAsset(id, fr.result);
+  fr.readAsDataURL(file);
+  return true;
+}
+function enterSheet() {
+  sheetOn = true; document.body.classList.add('sheet'); location.hash = 'assets';
+  if (!$('grid').children.length) buildSheet();
+  const repaint = () => { for (const a of ASSETS) paintSlot(a.id); };
+  repaint();
+  // a PNG restored from IndexedDB may still be decoding when the grid is built,
+  // and its onload fired before the canvas it belongs to existed
+  requestAnimationFrame(repaint); setTimeout(repaint, 260);
+}
+function exitSheet() { sheetOn = false; document.body.classList.remove('sheet'); if (location.hash) history.replaceState(null, '', location.pathname); dirty = true; }
+
+/* ======================================================================
+   15. picking things off the chart
+   ====================================================================== */
+function identify(sx, sy) {
+  const mpp = mppTrue();
+  let best = null, bd = 34 * 34;
+  const test = (x, y, mk) => { const dx = sxOf(x) - sx, dy = syOf(y) - sy, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = mk(); } };
+  for (const a of HI.actions) if (today >= a.d) for (const u of a.u) test(u.x, u.y, () => ({ h: u.n, ja: u.ja, t: (SHIPS[u.c] ? 'classe ' + SHIPS[u.c].n + ' · ' + SHIPS[u.c].t + ' · ' + SHIPS[u.c].l + ' m · ' + SHIPS[u.c].sp + ' nós' : '') + (u.f === 'sunk' ? ' · afundado' : u.f === 'damaged' ? ' · avariado' : ''), b: SHIPS[u.c] ? SHIPS[u.c].tx : '' }));
+  if (showBattles) for (const b of HI.battles) if (seenBattle(b)) test(b.x, b.y, () => ({ h: b.pt, ja: b.ja, t: b.n + ' · ' + dateOf(b.d0) + (b.v === 'jp' ? ' · vitória japonesa' : b.v === 'draw' ? ' · indeciso' : ' · vitória aliada'), b: b.t + (b.lj || b.la ? '<br><i>perdas — JP: ' + (b.lj || '—') + ' · aliados: ' + (b.la || '—') + '</i>' : '') }));
+  if (showBases) for (const p of HI.bases) test(p.x, p.y, () => ({ h: p.pt, ja: p.ja, t: p.n + ' · ' + p.lat.toFixed(2) + '° ' + (p.lat >= 0 ? 'N' : 'S'), b: p.t }));
+  const el = $('info');
+  if (!best) { el.style.display = 'none'; return; }
+  el.innerHTML = '<h3>' + best.h + (best.ja ? ' <span class="ja">' + best.ja + '</span>' : '') + '</h3><div class="t">' + best.t + '</div>' + (best.b ? '<div style="margin-top:4px">' + best.b + '</div>' : '');
+  el.style.display = 'block';
+}
+
+/* ======================================================================
+   16. navigation
+   ====================================================================== */
+let fly = null;
+const S_MIN = 2e-8, S_MAX = 60;
+const sane = () => isFinite(cam.x) && isFinite(cam.y) && cam.s >= S_MIN && cam.s <= S_MAX;
+function flyTo(x, y, s, ms) {
+  if (!isFinite(x) || !isFinite(y) || !(s > 0)) return;
+  if (!sane()) setHome(true);
+  fly = { x0: cam.x, y0: cam.y, s0: cam.s, x1: x, y1: y, s1: clamp(s, S_MIN, S_MAX), t0: performance.now(), ms: ms || 850 };
+}
+function homeScale() { return Math.max(S_MIN, Math.min(W / (WIN.x1 - WIN.x0), H / (WIN.y1 - WIN.y0)) * 0.98); }
+function setHome(now) {
+  const x = (WIN.x0 + WIN.x1) / 2, y = (WIN.y0 + WIN.y1) / 2, s = homeScale();
+  if (now) { cam.x = x; cam.y = y; cam.s = s; fly = null; dirty = true; }
+  else flyTo(x, y, s);
+}
+const home = () => setHome(false);
+function zoomAt(px, py, k) {
+  if (!sane()) { setHome(true); return; }
+  const wx = cam.x + (px - W / 2) / cam.s, wy = cam.y + (py - H / 2) / cam.s;
+  cam.s = clamp(cam.s * k, S_MIN, S_MAX);
+  cam.x = wx - (px - W / 2) / cam.s; cam.y = wy - (py - H / 2) / cam.s;
+  if (!sane()) setHome(true);
+  dirty = true;
+}
+function buildGoto() {
+  const sel = $('goto');
+  const add = (label, x, y, s) => { const o = document.createElement('option'); o.value = x + ',' + y + ',' + s; o.textContent = label; sel.appendChild(o); };
+  const grp = t => { const o = document.createElement('optgroup'); o.label = t; sel.appendChild(o); return o; };
+  let g = grp('as quatro ações, navio a navio');
+  for (const a of HI.actions) { const o = document.createElement('option'); o.value = a.x + ',' + a.y + ',' + (1 / 20) + ',' + a.d; o.textContent = a.pt; g.appendChild(o); }
+  g = grp('batalhas');
+  for (const b of HI.battles.filter(b => b.sc >= 2)) { const o = document.createElement('option'); o.value = b.x + ',' + b.y + ',' + (1 / 900) + ',' + b.d0; o.textContent = b.pt + ' — ' + dateOf(b.d0); g.appendChild(o); }
+  g = grp('bases e portos');
+  for (const p of HI.bases.filter(p => p.z >= 3)) { const o = document.createElement('option'); o.value = p.x + ',' + p.y + ',' + (1 / 300); o.textContent = p.pt; g.appendChild(o); }
+  sel.onchange = () => {
+    if (!sel.value) return;
+    const v = sel.value.split(',').map(Number);
+    if (v.length > 3 && !isNaN(v[3])) setDay(clamp(v[3], 0, DAYS));
+    flyTo(v[0], v[1], v[2], 1100);
+    sel.selectedIndex = 0;
+  };
+}
+function setDay(d) {
+  today = clamp(Math.round(d), 0, DAYS);
+  $('whenR').value = today; $('whenTxt').textContent = dateOf(today);
+  dirty = true;
+}
+
+/* ======================================================================
+   17. events
+   ====================================================================== */
+window.addEventListener('resize', resize);
+canvas.addEventListener('wheel', e => { e.preventDefault(); const r = canvas.getBoundingClientRect(); fly = null; zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }, { passive: false });
+let dragging = false, moved = 0, last = [0, 0], pinch = null;
+const pointers = new Map();
+canvas.addEventListener('pointerdown', e => {
+  fly = null; canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  dragging = true; moved = 0; last = [e.clientX, e.clientY]; canvas.classList.add('drag');
+  if (pointers.size === 2) { const v = [...pointers.values()]; pinch = { d: Math.max(8, Math.hypot(v[0][0] - v[1][0], v[0][1] - v[1][1])), s: cam.s }; }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pointers.size === 2 && pinch) {
+    const v = [...pointers.values()], d = Math.max(8, Math.hypot(v[0][0] - v[1][0], v[0][1] - v[1][1]));
+    const r = canvas.getBoundingClientRect();
+    const k = (pinch.s * d / pinch.d) / cam.s;
+    zoomAt((v[0][0] + v[1][0]) / 2 - r.left, (v[0][1] + v[1][1]) / 2 - r.top, k);
+    return;
+  }
+  if (!dragging) return;
+  const dx = e.clientX - last[0], dy = e.clientY - last[1];
+  moved += Math.abs(dx) + Math.abs(dy); last = [e.clientX, e.clientY];
+  cam.x -= dx / cam.s; cam.y -= dy / cam.s; dirty = true;
+});
+const up = e => {
+  if (pointers.has(e.pointerId)) {
+    pointers.delete(e.pointerId);
+    if (moved < 4) { const r = canvas.getBoundingClientRect(); identify(e.clientX - r.left, e.clientY - r.top); }
+  }
+  if (pointers.size < 2) pinch = null;
+  if (!pointers.size) { dragging = false; canvas.classList.remove('drag'); }
+};
+canvas.addEventListener('pointerup', up);
+canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('dblclick', e => { const r = canvas.getBoundingClientRect(); flyTo(cam.x + (e.clientX - r.left - W / 2) / cam.s, cam.y + (e.clientY - r.top - H / 2) / cam.s, cam.s * 4); });
+
+const toggle = (btn, get, set) => { const b = $(btn); b.onclick = () => { set(!get()); b.classList.toggle('on', get()); dirty = true; }; };
+toggle('bFront', () => showFronts, v => showFronts = v);
+toggle('bTracks', () => showTracks, v => showTracks = v);
+toggle('bBattles', () => showBattles, v => showBattles = v);
+toggle('bBases', () => showBases, v => showBases = v);
+toggle('bLabels', () => showLabels, v => showLabels = v);
+toggle('bGrid', () => showGrid, v => showGrid = v);
+toggle('bDepth', () => showDepth, v => showDepth = v);
+toggle('bSprites', () => useSprites, v => useSprites = v);
+$('bSheet').onclick = () => sheetOn ? exitSheet() : enterSheet();
+$('shBack').onclick = exitSheet;
+$('whenR').oninput = e => setDay(+e.target.value);
+let playing = 0;
+$('bPlay').onclick = () => {
+  playing = playing ? 0 : 1;
+  $('bPlay').textContent = playing ? '❚❚' : '▶';
+  $('bPlay').classList.toggle('on', !!playing);
+};
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'Escape' && sheetOn) { exitSheet(); return; }
+  const k = e.key.toLowerCase();
+  const hit = { f: 'bFront', r: 'bTracks', b: 'bBattles', n: 'bBases', l: 'bLabels', g: 'bGrid', s: 'bDepth', i: 'bSprites', a: 'bSheet' }[k];
+  if (hit) { $(hit).click(); return; }
+  if (e.key === 'Home') { home(); return; }
+  if (e.key === '+' || e.key === '=') { zoomAt(W / 2, H / 2, 1.6); return; }
+  if (e.key === '-') { zoomAt(W / 2, H / 2, 1 / 1.6); return; }
+  if (e.key === 'ArrowRight') { setDay(today + (e.shiftKey ? 30 : 1)); return; }
+  if (e.key === 'ArrowLeft') { setDay(today - (e.shiftKey ? 30 : 1)); return; }
+});
+
+/* --- dropping PNGs, anywhere on the page --- */
+let dragDepth = 0;
+window.addEventListener('dragenter', e => { e.preventDefault(); if (++dragDepth === 1) document.body.classList.add('dropping'); });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('dragleave', e => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dropping'); } });
+window.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('dropping');
+  const slot = e.target.closest && e.target.closest('.slot');
+  const files = [...(e.dataTransfer.files || [])];
+  let n = 0, bad = [];
+  for (const f of files) {
+    if (f.name.toLowerCase().endsWith('.json')) { readAssetsJSON(f); n++; continue; }
+    const ok = fileToSlot(f, slot && files.length === 1 ? slot.dataset.id : null);
+    ok ? n++ : bad.push(f.name);
+  }
+  if (!sheetOn && n) enterSheet();
+  if (bad.length) alert('sem slot para: ' + bad.join(', ') + '\n\no nome do arquivo tem que ser o id do asset (veja embaixo de cada quadro).');
+});
+function readAssetsJSON(file) {
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const J = JSON.parse(fr.result);
+      for (const k of Object.keys(J)) if (ASSET[k]) setAsset(k, J[k].b64 ? 'data:image/png;base64,' + J[k].b64 : J[k]);
+    } catch (err) { alert('assets.json ilegível'); }
+  };
+  fr.readAsText(file);
+}
+const pick = (accept, multiple, cb) => { const i = document.createElement('input'); i.type = 'file'; i.accept = accept; i.multiple = multiple; i.onchange = () => cb([...i.files]); i.click(); };
+$('shImport').onclick = () => pick('image/png,image/*', true, fs => { const bad = fs.filter(f => !fileToSlot(f)); if (bad.length) alert('sem slot para: ' + bad.map(f => f.name).join(', ')); });
+$('shJson').onclick = () => pick('application/json,.json', false, fs => fs[0] && readAssetsJSON(fs[0]));
+$('shExport').onclick = async () => {
+  const all = await DB.entries();
+  const out = {};
+  for (const k of Object.keys(all)) out[k] = { b64: String(all[k]).replace(/^data:image\/\w+;base64,/, '') };
+  const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+  const a = document.createElement('a'); a.download = 'assets.json'; a.href = URL.createObjectURL(blob); a.click();
+};
+$('shClear').onclick = async () => {
+  if (!confirm('devolver todos os assets ao desenho em código?')) return;
+  await DB.clear();
+  for (const k of Object.keys(MINE)) delete MINE[k];
+  dirty = true; for (const a of ASSETS) paintSlot(a.id);
+};
+
+/* ======================================================================
+   18. the loop, and the start
+   ====================================================================== */
+let lastTick = 0;
+function frame(t) {
+  if (fly) {
+    const k = clamp((t - fly.t0) / fly.ms, 0, 1), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    cam.x = lerp(fly.x0, fly.x1, e); cam.y = lerp(fly.y0, fly.y1, e);
+    cam.s = Math.exp(lerp(Math.log(fly.s0), Math.log(fly.s1), e));
+    if (k >= 1) fly = null;
+    dirty = true;
+  }
+  if (playing && t - lastTick > 55) { lastTick = t; setDay(today + 2); if (today >= DAYS) { playing = 0; $('bPlay').textContent = '▶'; $('bPlay').classList.remove('on'); } }
+  if (dirty && !sheetOn) { dirty = false; draw(); }
+  requestAnimationFrame(frame);
+}
+
+(function start() {
+  resize(); legend(); buildGoto(); setDay(0);
+  const img = new Image();
+  img.onload = async () => {
+    const cv = document.createElement('canvas'); cv.width = FI.w; cv.height = FI.h;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    FD = g.getImageData(0, 0, FI.w, FI.h).data;
+    buildBase();
+    const mine = await DB.entries();
+    for (const k of Object.keys(mine)) if (ASSET[k]) addImage(MINE, k, mine[k]);
+    $('loading').style.display = 'none';
+    setHome(true);
+    if (location.hash === '#assets') enterSheet();
+    requestAnimationFrame(frame);
+  };
+  img.onerror = () => { $('loading').textContent = 'não consegui decodificar fields.png'; };
+  img.src = 'data:image/png;base64,' + document.getElementById('fields').textContent.trim();
+})();
+
+window.__mapa = { cam, flyTo, home, toXY, latOf, lonOf, setDay, draw: () => { draw(); return lastFrameMs; }, sheet: enterSheet, ASSETS, HI, SHIPS, touch: () => { dirty = true; } };
+})();
+</script>
+</body>
+</html>

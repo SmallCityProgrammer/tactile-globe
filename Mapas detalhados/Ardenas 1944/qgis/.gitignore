@@ -1,0 +1,6 @@
+osm.json
+texturas/
+saida/
+svg/
+*.gpkg
+__pycache__/

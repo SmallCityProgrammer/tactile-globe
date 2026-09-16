@@ -178,29 +178,47 @@ def mancha(pasta, nome, lado=512, base=8, oitavas=5, semente=1941,
     return _guarda(pasta, nome, params, pinta)
 
 
-def laje(pasta, nome, lado=512, placas=5, semente=7, forca=0.13, junta=0.40,
-         junta_px=2, variacao=0.34, grao=0.30, grao_base=128, desalinho=0.5):
+def laje(pasta, nome, lado=512, placas=8, baias=2, semente=7, forca=0.115, junta=0.30,
+         junta_px=2, variacao=0.15, baia_var=0.20, mancha_base=3, mancha_forca=0.70,
+         grao=0.25, grao_base=128, desalinho=0.5):
     """
-    Concreto: uma malha de placas, cada uma com o seu tom, separadas por junta.
+    Concreto: placas com junta, agrupadas em baias, sob manchas largas.
 
-    E o que da o patio da base. Na referencia as placas sao grandes e o tom muda
-    de uma para a outra — e essa variacao, e nao a junta, que faz o olho ler
-    "concreto" em vez de "retangulo bege".
+    A primeira versao era uma grade regular de placas pequenas, todas com tom
+    independente, e lia como piso de banheiro. Na referencia o patio e uma
+    superficie continua: as placas sao grandes, o tom anda em BLOCOS de varias
+    placas (a concretagem foi feita por baia, num dia so), e por cima disso tudo
+    passam manchas largas que atravessam a malha inteira e ignoram as juntas.
 
-    placas      quantas placas cabem no lado do ladrilho; tem que ser inteiro,
-                senao a junta da borda nao encontra a da borda oposta
+    Sao tres escalas empilhadas, e e o empilhamento que mata a leitura de grade:
+
+      mancha_forca   manchas bem maiores que a baia, de ruido fBm
+      baia_var       tom por grupo de 'baias' x 'baias' placas
+      variacao       tom por placa, pequeno — so tira o chapado de dentro da baia
+
+    placas      quantas placas cabem no lado do ladrilho; inteiro, senao a junta
+                da borda nao encontra a da borda oposta
+    baias       quantas placas formam o lado de uma baia; tem que dividir 'placas'
     junta       quanto a junta escurece (0..1)
-    variacao    quanto o tom varia de placa para placa
-    desalinho   desloca as placas de cada faixa, para nao virar um xadrez perfeito;
-                em fracao da largura da placa, e sempre 1/N para continuar emendando
+    desalinho   desloca as placas de cada faixa, para nao virar xadrez perfeito;
+                fracao da largura da placa
     """
-    params = dict(lado=lado, placas=placas, semente=semente, forca=forca, junta=junta,
-                  junta_px=junta_px, variacao=variacao, grao=grao, grao_base=grao_base,
-                  desalinho=desalinho)
+    params = dict(lado=lado, placas=placas, baias=baias, semente=semente, forca=forca,
+                  junta=junta, junta_px=junta_px, variacao=variacao, baia_var=baia_var,
+                  mancha_base=mancha_base, mancha_forca=mancha_forca,
+                  grao=grao, grao_base=grao_base, desalinho=desalinho)
 
     def pinta():
         p = lado / float(placas)
         gf = _grade(grao_base, semente + 313)
+        # a mancha larga tem que ser normalizada como no mancha(): crua, ela
+        # ocupa so uns 0,2 de faixa e ficaria fraca demais contra a variacao de
+        # baia, que e uniforme e usa a faixa inteira
+        _fm = Fbm(lado, mancha_base, 4, semente + 2027)
+        cru = [_fm(x, y) for y in range(lado) for x in range(lado)]
+        o = sorted(cru)
+        lo, hi = o[len(o) // 100], o[-len(o) // 100 - 1]
+        faixa = (hi - lo) or 1.0
         img = QImage(lado, lado, QImage.Format_ARGB32)
         for y in range(lado):
             fy = int(y // p)
@@ -212,7 +230,11 @@ def laje(pasta, nome, lado=512, placas=5, semente=7, forca=0.13, junta=0.40,
                 fx = int(xx // p)
                 dx, dy = xx - fx * p, y - fy * p
                 na_junta = dx < junta_px or dy < junta_px
-                t = 0.5 + (_sal(fx, fy, semente) - 0.5) * variacao
+                bx, by = fx // baias, fy // baias
+                t = 0.5
+                t += ((cru[y * lado + x] - lo) / faixa - 0.5) * mancha_forca   # a mancha larga
+                t += (_sal(bx, by, semente + 11) - 0.5) * baia_var
+                t += (_sal(fx, fy, semente) - 0.5) * variacao
                 t += (_valor(x / lado * grao_base, y / lado * grao_base, grao_base, gf) - 0.5) * grao
                 if na_junta:
                     t -= junta

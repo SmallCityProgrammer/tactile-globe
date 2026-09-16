@@ -25,7 +25,7 @@ from qgis.core import (QgsApplication, QgsVectorLayer, QgsProject, QgsFeature, Q
                        QgsSimpleFillSymbolLayer, QgsSimpleLineSymbolLayer, QgsSimpleMarkerSymbolLayer,
                        QgsLinePatternFillSymbolLayer, QgsPointPatternFillSymbolLayer,
                        QgsShapeburstFillSymbolLayer, QgsDropShadowEffect, QgsEffectStack,
-                       QgsDrawSourceEffect, QgsUnitTypes, QgsSpatialIndex)
+                       QgsDrawSourceEffect, QgsUnitTypes, QgsSpatialIndex, QgsVectorFileWriter)
 from qgis.PyQt.QtCore import QSize, QVariant
 from qgis.PyQt.QtGui import QColor
 
@@ -168,17 +168,36 @@ mar.setName('mar')
 # Camada de memoria nao sobrevive dentro de um projeto: ao reabrir o .qgz o
 # QGIS acharia a referencia e nao os dados. Entao vira arquivo.
 def grava(layer, nome):
-    # GeoPackage, e nao GeoJSON: o driver do GeoJSON se recusa a sobrescrever, e
-    # o OneDrive as vezes ainda segura o arquivo da rodada anterior.
+    """
+    Grava a camada em GeoPackage, SOBRESCREVENDO no lugar.
+
+    Apagar-e-recriar e fragil aqui: o OneDrive segura o arquivo da rodada
+    anterior, o `os.remove` falha, e entao tanto o driver do GeoJSON quanto o do
+    GPKG se recusam a criar por cima — a rodada inteira morre no meio. O
+    QgsVectorFileWriter com CreateOrOverwriteFile abre o arquivo para escrita em
+    vez de desligar e religar, e passa por cima do cadeado. O caminho antigo fica
+    de reserva, para o caso de o writer nao existir nesta versao.
+    """
     caminho = os.path.join(HERE, nome + '.gpkg')
-    for _ in range(6):
-        if not os.path.exists(caminho): break
-        try: os.remove(caminho); break
-        except OSError: time.sleep(0.4)
-    processing.run('native:savefeatures', {'INPUT': layer, 'OUTPUT': caminho})
+    op = QgsVectorFileWriter.SaveVectorOptions()
+    op.driverName = 'GPKG'
+    op.layerName = nome
+    op.fileEncoding = 'UTF-8'
+    op.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteFile
+    ret = QgsVectorFileWriter.writeAsVectorFormatV3(
+        layer, caminho, QgsProject.instance().transformContext(), op)
+    erro = ret[0] if isinstance(ret, (tuple, list)) else ret
+    if erro != QgsVectorFileWriter.NoError:
+        for _ in range(8):                        # plano B: o caminho antigo
+            if not os.path.exists(caminho): break
+            try: os.remove(caminho); break
+            except OSError: time.sleep(0.5)
+        processing.run('native:savefeatures', {'INPUT': layer, 'OUTPUT': caminho})
     v = QgsVectorLayer(caminho + '|layername=' + nome, nome, 'ogr')
     if not v.isValid(): v = QgsVectorLayer(caminho, nome, 'ogr')
-    return v if v.isValid() else layer
+    if not v.isValid():
+        raise IOError('nao consegui reabrir ' + caminho)
+    return v
 
 terra = grava(terra, 'terra')
 base = grava(base, 'base')

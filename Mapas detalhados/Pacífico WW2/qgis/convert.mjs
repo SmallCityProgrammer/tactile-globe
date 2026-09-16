@@ -4,6 +4,9 @@ const ring=g=>g.map(p=>[p.lon,p.lat]);
 const closed=r=>r.length>3 && r[0][0]===r[r.length-1][0] && r[0][1]===r[r.length-1][1];
 const area=r=>{let a=0;for(let i=0,n=r.length-1;i<n;i++)a+=r[i][0]*r[i+1][1]-r[i+1][0]*r[i][1];return Math.abs(a/2)*(111320**2)*Math.cos(21.36*Math.PI/180);};
 const L={agua:[],costa:[],verde:[],via:[],predio:[],pier:[],aero:[]};
+const VIAS={motorway:1,trunk:1,primary:1,secondary:2,tertiary:2,
+            unclassified:3,residential:3,road:3,living_street:3,
+            service:4,track:4,pedestrian:4};
 const push=(k,geom,props)=>L[k].push({type:'Feature',properties:props,geometry:geom});
 let wArea=0,wMax=0;
 for(const e of J.elements||[]){
@@ -17,7 +20,11 @@ for(const e of J.elements||[]){
     continue;
   }
   if(!r) continue;
-  if(t.highway){ if(['motorway','trunk','primary','secondary','tertiary'].includes(t.highway)) push('via',{type:'LineString',coordinates:r},{h:t.highway}); continue; }
+  // A classe vai junto como 'c', para o estilo variar a espessura. Ficar so nas
+  // cinco classes maiores tirava do mapa toda a circulacao interna da base: as
+  // vias de Ford Island sao service e unclassified, e sem elas a ilha aparece
+  // sem nenhum dos caminhos por onde se andava nela.
+  if(t.highway){ const c=VIAS[t.highway]; if(c) push('via',{type:'LineString',coordinates:r},{h:t.highway,c}); continue; }
   if(t.man_made==='pier'||t.man_made==='breakwater'){ push('pier',closed(r)?poly(r):{type:'LineString',coordinates:r},{}); continue; }
   if(!closed(r)) continue;
   if(t.building){ if(area(r)>300) push('predio',poly(r),{}); continue; }

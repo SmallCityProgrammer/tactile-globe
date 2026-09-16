@@ -59,7 +59,7 @@ MAR_ESTILO = 'mancha'    # liso | lona | mancha | mancha-espuma
 ESC_AGUA   = 150.0
 ESC_GRAMA  = 90.0
 ESC_MATA   = 54.0
-ESC_LAJE   = 46.0
+ESC_LAJE   = 64.0
 ESC_ROCADA = 70.0
 ESC_CAIS   = 22.0
 ESC_PAPEL  = 60.0
@@ -324,9 +324,21 @@ def telhados(layer, hachura=False):
         camadas.append(h)
     return veste(layer, *camadas, efeito=sombra(1.15, 0.5, SOMBRA_SEC, 0.6, 135))
 
+# A espessura da via sai da classe do OSM, que o convert.mjs guarda no campo 'c':
+# 1 grandes, 2 arteriais, 3 locais, 4 servico e trilha. Sem isso os 5194 caminhos
+# de servico — que sao justamente os que circulam dentro da base — ficariam da
+# mesma grossura das rodovias e a ilha viraria um novelo.
+LARG_ORLA   = (0.95, 0.74, 0.54, 0.38)
+LARG_NUCLEO = (0.62, 0.48, 0.32, 0.20)
+
+def _por_classe(vals):
+    return 'array_get(array({v}), coalesce("c", 4) - 1)'.format(v=', '.join(str(v) for v in vals))
+
 def via_dupla(layer):
-    orla = QgsSimpleLineSymbolLayer(QColor(VIA_ORLA)); orla.setWidth(0.62)
-    nucleo = QgsSimpleLineSymbolLayer(QColor(VIA)); nucleo.setWidth(0.38)
+    orla = QgsSimpleLineSymbolLayer(QColor(VIA_ORLA)); orla.setWidth(LARG_ORLA[0])
+    nucleo = QgsSimpleLineSymbolLayer(QColor(VIA)); nucleo.setWidth(LARG_NUCLEO[0])
+    dd(orla, QgsSymbolLayer.Property.StrokeWidth, _por_classe(LARG_ORLA))
+    dd(nucleo, QgsSymbolLayer.Property.StrokeWidth, _por_classe(LARG_NUCLEO))
     s = QgsLineSymbol(); s.deleteSymbolLayer(0)
     for c in (orla, nucleo):
         c.setPenCapStyle(1); c.setPenJoinStyle(1); _mm(c, 'setWidthUnit'); s.appendSymbolLayer(c)

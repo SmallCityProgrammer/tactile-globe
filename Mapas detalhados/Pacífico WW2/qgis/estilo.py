@@ -274,45 +274,16 @@ def cais(pasta):
 
 def mata(pasta):
     """
-    A mata: verde mais frio, manchado, e as copas salpicadas por cima.
+    A mata. As arvores moram em arvores.py, que ficou grande o bastante para ter
+    arquivo proprio: sorteio aleatorio semeado no lugar da grade, tamanho e cor
+    variando por arvore, e a borda esfarrapada — que era o maior denunciador,
+    porque a mata terminava numa reta do OSM.
 
-    Duas correcoes importantes aqui. O setter do jitter chama-se
-    setMaximumRandomDeviationX — setRandomDeviationX nao existe, e como estava
-    atras de um hasattr as copas vinham numa grade perfeita sem ninguem notar. E
-    a semente de fabrica e 0, que significa "re-sorteia a cada render": sem
-    setSeed a mata muda de desenho a cada repintura.
-
-    A sombrinha de cada copa e outra camada de marcador deslocada, e nao um
-    efeito de sombra: efeito por marcador sairia caro em centenas de milhares de
-    arvores.
+    O import e aqui dentro de proposito: arvores.py importa a paleta deste
+    modulo, e no topo isso seria um ciclo.
     """
-    sombrinha = QgsSimpleMarkerSymbolLayer()
-    sombrinha.setColor(QColor(COPA_SOMBRA)); sombrinha.setStrokeStyle(0)
-    sombrinha.setSize(1.6); _mm(sombrinha, 'setSizeUnit')
-    sombrinha.setOffset(QPointF(0.28, 0.28)); _mm(sombrinha, 'setOffsetUnit')
-    copa = QgsSimpleMarkerSymbolLayer()
-    copa.setColor(QColor(COPA)); copa.setStrokeStyle(0)
-    copa.setSize(1.5); _mm(copa, 'setSizeUnit')
-
-    ms = QgsMarkerSymbol(); ms.deleteSymbolLayer(0)
-    ms.appendSymbolLayer(sombrinha); ms.appendSymbolLayer(copa)
-    # tamanho proprio por copa, preso a celula da grade para nao piscar
-    dd(copa, QgsSymbolLayer.Property.Size,
-       'randf(1.15, 1.85, @symbol_marker_row * 1000 + @symbol_marker_column)')
-    dd(sombrinha, QgsSymbolLayer.Property.Size,
-       'randf(1.25, 1.95, @symbol_marker_row * 1000 + @symbol_marker_column)')
-
-    pp = QgsPointPatternFillSymbolLayer()
-    pp.setDistanceX(2.3); pp.setDistanceY(2.3); pp.setDisplacementX(1.15)
-    _mm(pp, 'setDistanceXUnit', 'setDistanceYUnit', 'setDisplacementXUnit')
-    pp.setMaximumRandomDeviationX(0.7); pp.setMaximumRandomDeviationY(0.7)
-    _mm(pp, 'setRandomDeviationXUnit', 'setRandomDeviationYUnit')
-    pp.setSeed(1941)                         # 0 significa re-sortear a cada render
-    pp.setSubSymbol(ms)
-
-    manchado = sobre(T.mancha(pasta, 'mata', base=6, oitavas=5, contraste=0.70,
-                              forca=0.28, grao=0.25, semente=5150), ESC_MATA)
-    return [simples(MATA), manchado, pp]
+    import arvores
+    return arvores.mata(pasta)
 
 def papel(pasta):
     """A granulacao que passa por cima do mapa inteiro e amarra as camadas."""

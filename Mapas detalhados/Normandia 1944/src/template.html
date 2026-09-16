@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Carentan — 12 de junho de 1944</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #93a054; overflow: hidden;
+               font: 13px/1.35 "Segoe UI", system-ui, sans-serif; color: #2b2f24; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.arrastando { cursor: grabbing; }
+  canvas.rota { cursor: crosshair; }
+
+  .painel { position: fixed; background: rgba(243,239,225,.94); border: 1px solid #b9b19a;
+            border-radius: 5px; box-shadow: 0 2px 10px rgba(20,35,25,.30); }
+
+  #barra { left: 12px; right: 12px; bottom: 12px; display: flex; gap: 8px;
+           align-items: center; padding: 7px 10px; }
+  #barra button, #tropas button, #topo button, #topo select {
+            font: inherit; padding: 3px 9px; border: 1px solid #a7a08b; border-radius: 4px;
+            background: #e9e4d2; color: #2b2f24; cursor: pointer; }
+  #barra button:hover, #tropas button:hover, #topo button:hover { background: #f6f2e4; }
+  #barra button.on, #tropas button.on { background: #6f8a3e; border-color: #55702c; color: #f3efe1; }
+  #linha { flex: 1; height: 5px; background: #cdc6ae; border-radius: 3px; position: relative; cursor: pointer; }
+  #cursor { position: absolute; top: -4px; width: 3px; height: 13px; background: #7c3b2a; border-radius: 2px; }
+  #relogio { font-variant-numeric: tabular-nums; min-width: 96px; text-align: right; }
+
+  #topo { left: 12px; top: 12px; display: flex; gap: 6px; padding: 7px 10px; align-items: center; }
+
+  #tropas { left: 12px; top: 58px; width: 234px; max-height: 64vh; overflow: auto; padding: 8px; display: none; }
+  #tropas.aberto { display: block; }
+  #tropas h4 { margin: 2px 0 6px; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; color: #6a6450; }
+  .tropa { display: flex; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 4px; cursor: grab; }
+  .tropa:hover { background: #e4dfcc; }
+  .tropa canvas { width: 30px; height: 30px; flex: none; }
+  .tropa b { font-weight: 600; } .tropa span { color: #6a6450; font-size: 11px; }
+
+  #ficha { right: 12px; top: 12px; width: 212px; padding: 8px 10px; display: none; }
+  #ficha.aberto { display: block; }
+  #ficha h4 { margin: 0 0 6px; font-size: 13px; }
+  #ficha label { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 12px; }
+  #ficha input[type=range] { width: 108px; }
+
+  #aviso { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+           background: rgba(147,160,84,.96); font-size: 15px; text-align: center; padding: 40px; }
+  .oculto { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="tela"></canvas>
+
+<div id="topo" class="painel">
+  <strong>Carentan</strong>
+  <select id="selCena"><option value="">cena…</option></select>
+  <button id="btTropas" title="u">tropas</button>
+  <button id="btRota" title="t">rota</button>
+  <button id="btTrajetos" title="h" class="on">trajetos</button>
+  <button id="btCam" title="c — a câmera segue as chaves da cena">câmera</button>
+  <button id="btLeg" title="l — nomes, objetivos e o relógio da manhã" class="on">legendas</button>
+  <button id="btLimpar">limpar</button>
+</div>
+
+<div id="tropas" class="painel"><h4>tropas</h4><div id="listaTropas"></div></div>
+
+<div id="ficha" class="painel">
+  <h4 id="fichaNome">—</h4>
+  <label>tamanho <input type="range" id="fTam" min="4" max="400" step="1"><b id="fTamV"></b></label>
+  <label>giro <input type="range" id="fGiro" min="-180" max="180" step="1"><b id="fGiroV"></b></label>
+  <label>todos <input type="range" id="fEsc" min="0.2" max="6" step="0.05"><b id="fEscV"></b></label>
+  <button id="fApaga">apagar unidade</button>
+</div>
+
+<div id="barra" class="painel">
+  <button id="btTocar" title="espaço">▶</button>
+  <button id="btInicio" title="0">⏮</button>
+  <div id="linha"><div id="cursor"></div></div>
+  <span id="relogio">0.00 / 0.00 s</span>
+</div>
+
+<div id="aviso"></div>
+
+<script type="application/json" id="placas">__PLACAS_JSON__</script>
+<script type="application/octet-stream" id="imagens">__SPRITES_JSON__</script>
+<script>
+/* =====================================================================
+   Carentan Studio — o mapa de Carentan como palco, e uma cena como dado.
+
+   Irmão do Globe Studio, com a esfera tirada fora. Aqui o mundo é uma
+   PLACA: o PNG que o QGIS rendeu, colado no Mercator pelas coordenadas
+   que o carentan.py gravou ao lado dele. Não há globo, não há relevo,
+   não há horizonte — há um mapa de 3,18 km de largura e soldados andando
+   por cima dele.
+
+   As três regras do repositório valem inteiras:
+
+   1. A EDIÇÃO É DADO. Nenhum tempo, posição ou tiro mora no script: tudo
+      na cena JSON (exportCena / loadCena). Quem escreve o JSON escreve o
+      filme.
+
+   2. EFEITO É FUNÇÃO PURA DE (SEMENTE, IDADE). Nada acumula entre
+      quadros. É isso que faz seek(t) + render() dar sempre o mesmo pixel,
+      e é o que sustenta o render quadro a quadro.
+
+   3. TAMANHO É NO CHÃO. O sizeM de uma unidade é a largura dela em
+      METROS de terreno — não em pixels de tela. Um pelotão de 18 m tem
+      18 m de mapa em qualquer zoom, e é por isso que ele cresce quando a
+      câmera desce. A única diferença para o Globe Studio é a unidade:
+      lá quilômetros, porque lá cabia um oceano; aqui metros, porque aqui
+      cabe uma rua.
+
+   O SISTEMA DE COORDENADAS é o EPSG:3857, em metros de mapa. Duas contas
+   moram nisso e vale dizer as duas em voz alta:
+
+   - lon/lat entra e sai em graus, que é como a história está escrita
+     ("o entroncamento fica em -1,24963, 49,30085"). O mundo interno é
+     3857 porque é nele que a placa é um retângulo alinhado aos eixos, e
+     desenhar vira um drawImage e nada mais.
+   - um metro de CHÃO não é uma unidade de 3857. O Mercator estica por
+     1/cos(lat), que nesta latitude é 1,53. Todo tamanho em metros passa
+     por chao() antes de virar geometria; esquecer isso encolheria cada
+     soldado em um terço.
+   ===================================================================== */
+'use strict';
+
+var PLACAS = JSON.parse(document.getElementById('placas').textContent || '[]');
+var IMG_B64 = JSON.parse(document.getElementById('imagens').textContent || '{}');
+
+/* ---------------- Mercator ---------------- */
+var R = 6378137.0, GR = Math.PI / 180;
+function mx(lon) { return lon * GR * R; }
+function my(lat) {
+  var s = Math.sin(lat * GR);
+  if (s > 0.9999) s = 0.9999; if (s < -0.9999) s = -0.9999;
+  return R / 2 * Math.log((1 + s) / (1 - s));
+}
+function lonDe(x) { return x / R / GR; }
+function latDe(y) { return (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) / GR; }
+/* metros de chão -> unidades de mapa, na latitude dada */
+function chao(m, lat) { return m / Math.cos(lat * GR); }
+
+/* ---------------- a tela ---------------- */
+var TELA = document.getElementById('tela'), ctx = TELA.getContext('2d', { alpha: false });
+var CW = 0, CH = 0, DPR = 1;
+function redimensiona() {
+  DPR = window.devicePixelRatio || 1;
+  CW = Math.max(2, Math.round(TELA.clientWidth * DPR));
+  CH = Math.max(2, Math.round(TELA.clientHeight * DPR));
+  TELA.width = CW; TELA.height = CH;
+  desenha();
+}
+window.addEventListener('resize', redimensiona);
+
+/* ---------------- a câmera ----------------
+   x, y no mundo (3857) e w = a largura visível, também em unidades de
+   mapa. A escala é a mesma nos dois eixos; y cresce para cima no mundo e
+   para baixo na tela, e é só aí que o sinal vira. */
+var cam = { x: 0, y: 0, w: 1000 };
+function k() { return CW / cam.w; }
+function paraTelaXY(X, Y) { var e = k(); return [(X - cam.x) * e + CW / 2, CH / 2 - (Y - cam.y) * e]; }
+function paraTela(lon, lat) { return paraTelaXY(mx(lon), my(lat)); }
+function doMundo(sx, sy) { var e = k(); return [cam.x + (sx - CW / 2) / e, cam.y - (sy - CH / 2) / e]; }
+
+/* a câmera na cena é lon/lat e LARGURA VISÍVEL EM METROS DE CHÃO. Não é
+   capricho de unidade: "a câmera enxerga 700 m" é uma frase que se
+   confere olhando o mapa, e um fator de zoom não é. */
+function poeCamera(lon, lat, larguraM) {
+  cam.x = mx(lon); cam.y = my(lat);
+  if (larguraM > 0) cam.w = chao(larguraM, lat);
+}
+function cameraAtual() {
+  var lat = latDe(cam.y);
+  return { lon: +lonDe(cam.x).toFixed(6), lat: +lat.toFixed(6),
+           larguraM: Math.round(cam.w * Math.cos(lat * GR)) };
+}
+
+/* ---------------- as placas ----------------
+   Cada placa é o mesmo mapa rendido num recorte e numa resolução. A
+   escolha é por quadro: a mais fina que CABE inteira no que a câmera vê.
+   Desenhar as duas empilhadas seria mais suave, mas as texturas do QGIS
+   estão em milímetros de TELA e mudam de escala entre um recorte e
+   outro — a emenda apareceria como um degrau de granulação no meio do
+   campo. Uma placa por quadro, e a cena pode fixar qual em camera.placa. */
+var IMAGENS = {}, prontas = 0;
+function carregaImagem(nome, b64, mime, aoFim) {
+  var im = new Image();
+  im.onload = function () { IMAGENS[nome] = im; prontas++; aoFim && aoFim(); };
+  im.onerror = function () { prontas++; aoFim && aoFim(); };
+  im.src = 'data:' + (mime || 'image/png') + ';base64,' + b64;
+}
+function placaPara(nome) {
+  if (nome) { for (var j = 0; j < PLACAS.length; j++) if (PLACAS[j].nome === nome) return PLACAS[j]; }
+  var v = retanguloVisivel(), melhor = null;
+  for (var i = 0; i < PLACAS.length; i++) {
+    var p = PLACAS[i], e = p.extensao3857;
+    if (e[0] <= v[0] && e[1] <= v[1] && e[2] >= v[2] && e[3] >= v[3]) {
+      if (!melhor || (e[2] - e[0]) < (melhor.extensao3857[2] - melhor.extensao3857[0])) melhor = p;
+    }
+  }
+  if (melhor) return melhor;
+  var maior = PLACAS[0];                       // nada cobre: a mais larga que houver
+  for (var m = 1; m < PLACAS.length; m++)
+    if (PLACAS[m].extensao3857[2] - PLACAS[m].extensao3857[0] >
+        maior.extensao3857[2] - maior.extensao3857[0]) maior = PLACAS[m];
+  return maior;
+}
+function retanguloVisivel() {
+  var meiaW = cam.w / 2, meiaH = cam.w * CH / CW / 2;
+  return [cam.x - meiaW, cam.y - meiaH, cam.x + meiaW, cam.y + meiaH];
+}
+
+/* =====================================================================
+   O CATÁLOGO
+   Tipos de unidade, não unidades. Um tipo diz o que a coisa é e com o
+   que ela atira; a cena diz onde ela está e quando. Trocar o desenho de
+   um tipo não mexe em nenhum tempo de nenhuma cena.
+   ===================================================================== */
+/* `imgEspera` é o desenho do homem PARADO, e é o par de `img`. O motor
+   troca de um para o outro quando o relógio cai num passo de espera —
+   então o pelotão que sobe a estrada em pé é o mesmo que fica de bruços
+   na vala durante os quarenta segundos em que a narração fala de outra
+   coisa. Um campo, e a cena não precisa saber que existem duas imagens.
+
+   `sizeM` é a largura da figura NO CHÃO. Para um grupo, é a pegada
+   nominal do conjunto: cada homem sai com uma fração dela (veja
+   desenhaUnidade), e quem manda na extensão da coluna é o espalhoM do
+   grupo. Os números aqui são maiores que um homem de verdade de
+   propósito — um soldado tem 60 cm de largura e a 500 m de tela isso é
+   meio pixel. Símbolo de mapa se lê, não se mede. */
+var CATALOGO = [
+  { id: 'paraquedista', nome: 'Paraquedista', lado: 'aliado', sizeM: 9,
+    img: 'us-para', imgEspera: 'us-deitado',
+    arma: { alcanceM: 400, cadencia: 9, cor: '#f2e6b8', grosso: 1.5 } },
+  { id: 'esquadra', nome: 'Esquadra (7)', lado: 'aliado', sizeM: 20,
+    img: 'us-para', imgEspera: 'us-deitado',
+    arma: { alcanceM: 400, cadencia: 12, cor: '#f2e6b8', grosso: 1.6 } },
+  { id: 'pelotao', nome: 'Pelotão (30)', lado: 'aliado', sizeM: 34,
+    img: 'us-para', imgEspera: 'us-deitado',
+    arma: { alcanceM: 500, cadencia: 16, cor: '#f2e6b8', grosso: 1.7 } },
+  { id: 'granadeiro', nome: 'Granadeiro', lado: 'aliado', sizeM: 9,
+    img: 'us-para', imgEspera: 'us-deitado',
+    arma: { alcanceM: 35, cadencia: 1.0, cor: '#ffcf8a', grosso: 2.6 } },
+  { id: 'fallschirm', nome: 'Fallschirmjäger', lado: 'eixo', sizeM: 20,
+    img: 'de-rifle', imgEspera: 'de-mira',
+    arma: { alcanceM: 400, cadencia: 9, cor: '#ffd2a8', grosso: 1.5 } },
+  { id: 'mg42', nome: 'Ninho de MG 42', lado: 'eixo', sizeM: 10,
+    img: 'de-mira', imgEspera: 'de-mira',
+    arma: { alcanceM: 600, cadencia: 20, cor: '#ffe0a6', grosso: 1.4 } },
+  { id: 'morteiro', nome: 'Morteiro', lado: 'eixo', sizeM: 10,
+    img: 'de-rifle', imgEspera: 'de-rifle',
+    arma: { alcanceM: 1200, cadencia: 0.6, cor: '#ffc98a', grosso: 2.8 } },
+  { id: 'britanico', nome: 'Fuzileiro (Brodie)', lado: 'aliado', sizeM: 9,
+    img: 'al-rifle', imgEspera: 'al-mira',
+    arma: { alcanceM: 400, cadencia: 9, cor: '#f2e6b8', grosso: 1.5 } }
+];
+function tipoPorId(id) { for (var i = 0; i < CATALOGO.length; i++) if (CATALOGO[i].id === id) return CATALOGO[i]; return null; }
+
+/* O desenho de reserva.
+   Uma unidade sem PNG não some e não vira um quadrado vermelho: ela vira
+   uma ficha desenhada em código, com a cor do lado e um traço que diz
+   para onde aponta. É o que deixa a cena inteira ser montada e
+   cronometrada ANTES de a arte existir — que é metade do motivo de a
+   cena ser dado e não código. */
+function fichaDeReserva(tipo, tamanho) {
+  var c = document.createElement('canvas'); c.width = c.height = tamanho;
+  var g = c.getContext('2d'), m = tamanho / 2, r = tamanho * 0.34;
+  var lado = tipo ? tipo.lado : 'neutro';
+  var fundo = lado === 'aliado' ? '#3f5d86' : lado === 'eixo' ? '#7c3b2a' : '#6a6450';
+  g.fillStyle = 'rgba(20,28,18,.34)';
+  g.beginPath(); g.arc(m + tamanho * .04, m + tamanho * .04, r, 0, 6.2832); g.fill();
+  g.fillStyle = fundo; g.strokeStyle = '#f3efe1'; g.lineWidth = Math.max(1, tamanho * .05);
+  g.beginPath(); g.arc(m, m, r, 0, 6.2832); g.fill(); g.stroke();
+  g.strokeStyle = '#f3efe1'; g.lineWidth = Math.max(1, tamanho * .09); g.lineCap = 'round';
+  g.beginPath(); g.moveTo(m, m + r * .12); g.lineTo(m, m - r * .78); g.stroke();
+  return c;
+}
+var RESERVA = {};
+function imagemDe(s) {
+  if (s.img && IMAGENS[s.img]) return IMAGENS[s.img];
+  var tipo = tipoPorId(s.type);
+  var ch = (tipo ? tipo.id : 'neutro');
+  if (!RESERVA[ch]) RESERVA[ch] = fichaDeReserva(tipo, 128);
+  return RESERVA[ch];
+}
+
+/* =====================================================================
+   AS UNIDADES E O RELÓGIO
+   ===================================================================== */
+var UNIDADES = [], selecionada = null, ESCALA = 1, T = 0, TOCANDO = false, AJUDAS = true;
+
+function fazUnidade(d) {
+  var tipo = tipoPorId(d.type);
+  return {
+    id: d.id, type: d.type || null, img: d.img || (tipo ? tipo.img : null),
+    imgEspera: d.imgEspera || (tipo ? tipo.imgEspera : null) || null,
+    rotulo: d.rotulo || null,
+    lon: +d.lon || 0, lat: +d.lat || 0,
+    heading: d.heading === undefined ? 0 : +d.heading, spin: +d.spin || 0,
+    sizeM: d.sizeM > 0 ? +d.sizeM : (tipo ? tipo.sizeM : 20),
+    opacity: d.opacity === undefined ? 1 : +d.opacity,
+    minPx: +d.minPx || 0, on: d.on === undefined ? true : !!d.on,
+    entra: d.entra === undefined ? null : +d.entra,
+    sai: d.sai === undefined ? null : +d.sai,
+    grupo: d.grupo ? clonaGrupo(d.grupo) : null,
+    route: d.route ? clonaRota(d.route) : null,
+    shots: d.shots ? JSON.parse(JSON.stringify(d.shots)) : null,
+    _l: d.lon, _t: d.lat, _h: d.heading || 0,       // onde está AGORA, depois do relógio
+    _parado: false                                   // se o relógio caiu numa espera
+  };
+}
+function clonaGrupo(g) {
+  return { n: Math.max(1, Math.min(60, Math.round(+g.n || 1))),
+           espalhoM: g.espalhoM > 0 ? +g.espalhoM : 18,
+           formacao: g.formacao || 'coluna',
+           semente: g.semente === undefined ? 7 : +g.semente };
+}
+
+/* =====================================================================
+   A ROTA COMO UMA LISTA DE PASSOS
+
+   A rota não é uma curva: é a AGENDA da unidade. Cada passo é uma de duas
+   coisas —
+
+     { points: [...], duration: 9 }   andar por aqui, levando 9 s
+     { esperar: 16 }                  ficar onde está, 16 s
+
+   e o passo seguinte começa quando o anterior acaba. Foi a única forma de
+   isto virar escrevível: numa cena de dois minutos com oito unidades,
+   `start` explícito em cada perna obriga quem escreve a somar tempos na
+   mão, e o primeiro ajuste no meio — "a MG abre fogo dois segundos antes"
+   — obriga a somar tudo de novo. Com o encadeamento implícito, mexer num
+   `esperar` empurra o resto sozinho.
+
+   `start` continua valendo, como CRAVO: um passo que traz start começa
+   naquele segundo e não no fim do anterior, e o resto da fila passa a
+   contar dali. É o que serve para prender uma unidade a um instante da
+   narração ("às 7h a ligação é feita") sem depender do que veio antes.
+
+   E esperar não é um estado guardado em lugar nenhum: é o que a função
+   devolve quando t cai dentro de um passo sem pontos. Continua sendo
+   função pura de t, que é o que faz seek(t) + render() dar sempre o mesmo
+   pixel. */
+function clonaRota(r) {
+  if (Array.isArray(r)) return r.map(clonaPasso);
+  return [clonaPasso(r)];
+}
+function clonaPasso(r) {
+  return { points: (r.points || []).map(function (p) { return [+p[0], +p[1]]; }),
+           duration: r.duration > 0 ? +r.duration : null,
+           speedKmh: r.speedKmh > 0 ? +r.speedKmh : null,
+           esperar: r.esperar > 0 ? +r.esperar : null,
+           start: (r.start === undefined || r.start === null) ? null : +r.start,
+           loop: !!r.loop, _cache: null };
+}
+function pernas(u) { return u.route || []; }
+function andante(p) { return p.points && p.points.length > 1; }
+function temRota(u) {
+  var P = pernas(u);
+  for (var i = 0; i < P.length; i++) if (andante(P[i])) return true;
+  return false;
+}
+
+/* A agenda resolvida: cada passo com o segundo em que começa e em que
+   acaba. Recalculada a cada chamada de propósito — é aritmética sobre meia
+   dúzia de passos, e a parte cara (a reamostragem da curva) tem cache
+   próprio. Guardar isto seria inventar um cache com invalidação para
+   economizar microssegundos, e aí um clique que muda a rota deixaria a
+   agenda velha no ar. */
+function agenda(u) {
+  var P = pernas(u), saida = [], t = 0;
+  for (var i = 0; i < P.length; i++) {
+    var p = P[i];
+    if (p.start !== null) t = p.start;           // o cravo
+    var dur = p.esperar > 0 ? p.esperar : (andante(p) ? duracaoRota(p) : 0);
+    saida.push({ p: p, ini: t, fim: t + dur, espera: !andante(p) });
+    t += dur;
+  }
+  return saida;
+}
+function fimDaAgenda(u) {
+  var A = agenda(u);
+  return A.length ? A[A.length - 1].fim : 0;
+}
+function unidadePorId(id) { for (var i = 0; i < UNIDADES.length; i++) if (UNIDADES[i].id === id) return UNIDADES[i]; return null; }
+
+/* ---------------- a rota ----------------
+   Catmull-Rom pelos pontos, reamostrada por comprimento de arco: a
+   unidade anda em velocidade constante de CHÃO, e não "um ponto por
+   segundo" — com pontos desiguais isso daria uma marcha que acelera e
+   freia sozinha a cada esquina. */
+function amostraRota(r) {
+  if (r._cache) return r._cache;
+  var P = r.points.map(function (p) { return [mx(p[0]), my(p[1])]; });
+  if (P.length < 2) { r._cache = { pts: P.slice(), acc: [0], total: 0 }; return r._cache; }
+  var passo = 1 / 24, pts = [];
+  for (var i = 0; i < P.length - 1; i++) {
+    var p0 = P[i === 0 ? 0 : i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2 < P.length ? i + 2 : P.length - 1];
+    for (var u = 0; u < 1 - 1e-9; u += passo) {
+      var u2 = u * u, u3 = u2 * u;
+      pts.push([0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * u + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * u2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * u3),
+                0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * u + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * u2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * u3)]);
+    }
+  }
+  pts.push(P[P.length - 1]);
+  var acc = [0], total = 0;
+  for (var j = 1; j < pts.length; j++) {
+    total += Math.hypot(pts[j][0] - pts[j - 1][0], pts[j][1] - pts[j - 1][1]);
+    acc.push(total);
+  }
+  r._cache = { pts: pts, acc: acc, total: total };
+  return r._cache;
+}
+/* a duração: o que a cena disser, ou o que a velocidade de chão pedir */
+function duracaoRota(r) {
+  if (r.duration > 0) return r.duration;
+  var a = amostraRota(r);
+  if (r.speedKmh > 0 && a.total > 0) {
+    var lat = latDe(a.pts[0][1]);
+    var metros = a.total * Math.cos(lat * GR);         // 3857 -> chão
+    return metros / (r.speedKmh * 1000 / 3600);
+  }
+  return 1;
+}
+/* o instante em que a unidade passa pelo waypoint i — é isso que o
+   `at` de um tiro quer dizer. Com vários passos, i conta os pontos
+   EMENDADOS; um passo de espera não tem ponto e não entra na contagem. */
+function tempoNoPonto(u, i) {
+  var A = agenda(u), visto = 0, ultimo = 0;
+  for (var n = 0; n < A.length; n++) {
+    var q = A[n].p.points.length;
+    if (!q) continue;
+    if (i < visto + q) {
+      var j = Math.min(Math.max(i - visto, 0), q - 1);
+      if (q < 2) return A[n].ini;
+      return A[n].ini + (A[n].fim - A[n].ini) * (j / (q - 1));
+    }
+    visto += q; ultimo = A[n].fim;
+  }
+  return ultimo;
+}
+function quantosPontos(u) {
+  var P = pernas(u), n = 0;
+  for (var i = 0; i < P.length; i++) n += P[i].points.length;
+  return n;
+}
+/* Onde a unidade está no instante t. Antes do primeiro passo andante, o
+   primeiro ponto dele; dentro de um passo andante, na curva; numa espera
+   ou depois do fim, parada onde o último andar a deixou.
+
+   Devolve também `parado`, que é o que troca o desenho do soldado em pé
+   pelo do soldado deitado enquanto ele está preso na vala. */
+function posicaoNoTempo(u, t) {
+  var A = agenda(u), anterior = null;
+  for (var i = 0; i < A.length; i++) {
+    var e = A[i];
+    if (e.espera) continue;
+    if (t < e.ini) {
+      /* ainda não chegou a hora deste passo: ou espera no fim do
+         anterior, ou aguarda no primeiro ponto do primeiro andar */
+      if (anterior) { var q = posicaoEm(anterior.p, anterior.fim, anterior.ini, anterior.fim); q.parado = true; return q; }
+      var z = posicaoEm(e.p, e.ini, e.ini, e.fim); z.parado = true; return z;
+    }
+    if (t <= e.fim) { var m = posicaoEm(e.p, t, e.ini, e.fim); m.parado = false; return m; }
+    anterior = e;
+  }
+  if (anterior) { var f = posicaoEm(anterior.p, anterior.fim, anterior.ini, anterior.fim); f.parado = true; return f; }
+  return null;
+}
+function posicaoEm(r, t, ini, fim) {
+  var a = amostraRota(r), d = fim - ini;
+  var u = d > 0 ? (t - ini) / d : 0;
+  if (r.loop && d > 0) u = ((u % 1) + 1) % 1;
+  u = Math.min(Math.max(u, 0), 1);
+  if (a.pts.length < 2) return { x: a.pts[0] ? a.pts[0][0] : 0, y: a.pts[0] ? a.pts[0][1] : 0, h: 0 };
+  var alvo = u * a.total, lo = 0, hi = a.acc.length - 1;
+  while (lo < hi - 1) { var mid = (lo + hi) >> 1; if (a.acc[mid] <= alvo) lo = mid; else hi = mid; }
+  var seg = a.acc[hi] - a.acc[lo], f = seg > 0 ? (alvo - a.acc[lo]) / seg : 0;
+  var x = a.pts[lo][0] + (a.pts[hi][0] - a.pts[lo][0]) * f;
+  var y = a.pts[lo][1] + (a.pts[hi][1] - a.pts[lo][1]) * f;
+  var dx = a.pts[hi][0] - a.pts[lo][0], dy = a.pts[hi][1] - a.pts[lo][1];
+  return { x: x, y: y, h: Math.atan2(dx, dy) / GR };     // rumo: horário a partir do norte
+}
+
+/* ---------------- os tiros ----------------
+   Um tiro tem um instante e um alvo, e nada mais. Tudo que ele desenha —
+   o traçador, o clarão, a fumaça — é FUNÇÃO PURA de (semente, idade).
+   Nada acumula: se a cena voltar para o segundo 3, o segundo 3 tem
+   exatamente os mesmos pixels que tinha. */
+function instanteDoTiro(u, sh) {
+  if (sh.t !== undefined) return +sh.t;
+  if (temRota(u) && sh.at !== undefined) return tempoNoPonto(u, +sh.at);
+  return 0;
+}
+function todosOsTiros() {
+  var out = [];
+  for (var i = 0; i < UNIDADES.length; i++) {
+    var u = UNIDADES[i];
+    for (var j = 0; u.shots && j < u.shots.length; j++) {
+      var sh = u.shots[j];
+      out.push({ de: u, sh: sh, t0: instanteDoTiro(u, sh), burst: sh.burst > 0 ? +sh.burst : 0.5,
+                 semente: (i * 131 + j * 17 + 7) });
+    }
+  }
+  return out;
+}
+/* quando cada unidade morre — derivado da cena, nunca acumulado. Uma
+   unidade destruída é uma unidade cujo `mortaEm` já passou, e essa é uma
+   pergunta que se responde com t e mais nada. */
+function mapaDeBaixas() {
+  var m = {}, tiros = todosOsTiros();
+  for (var i = 0; i < tiros.length; i++) {
+    var s = tiros[i];
+    if (!s.sh.kill || !s.sh.target) continue;
+    var q = s.t0 + s.burst;
+    if (m[s.sh.target] === undefined || q < m[s.sh.target]) m[s.sh.target] = q;
+  }
+  return m;
+}
+function fimDaCena() {
+  var fim = DURACAO_CENA || 0;
+  for (var i = 0; i < UNIDADES.length; i++) {
+    var u = UNIDADES[i];
+    fim = Math.max(fim, fimDaAgenda(u));
+    if (u.sai !== null) fim = Math.max(fim, u.sai + FADE);
+    for (var j = 0; u.shots && j < u.shots.length; j++)
+      fim = Math.max(fim, instanteDoTiro(u, u.shots[j]) + (u.shots[j].burst > 0 ? +u.shots[j].burst : 0.5) + 1.2);
+  }
+  for (var c = 0; c < CAM_CHAVES.length; c++) fim = Math.max(fim, CAM_CHAVES[c].t);
+  return Math.max(fim, 1);
+}
+
+/* =====================================================================
+   A CÂMERA DA CENA
+
+   Uma cena de dois minutos não se conta com a câmera parada: quando o
+   assunto é uma metralhadora numa esquina, 3 km de mapa na tela não
+   mostram nada, e quando o assunto é "a cidade é americana", 300 m não
+   mostram a cidade. Então a câmera é DADO, como todo o resto — uma lista
+   de chaves, cada uma dizendo em que segundo a câmera tem que estar onde
+   e enxergando quantos metros.
+
+   Duas decisões que valem a explicação:
+
+   O ZOOM INTERPOLA EM LOG. Ir de 1600 m para 200 m pelo meio linear passa
+   metade do tempo entre 1600 e 900 e a outra metade entre 900 e 200 — na
+   tela isso é uma aproximação que começa devagar e despenca no fim. Em
+   log, cada segundo multiplica a escala pelo mesmo fator, que é como o
+   olho lê zoom.
+
+   O PADRÃO É SUAVE. Interpolação linear entre chaves faz a câmera
+   arrancar e parar de supetão em cada chave. O smoothstep tira a
+   derivada nas pontas e o movimento fica de câmera de verdade. Uma chave
+   com `corte: true` pula: serve para a troca de assunto, que fica melhor
+   cortada do que viajada. */
+var CAM_CHAVES = [], CAM_PRESA = true, DURACAO_CENA = 0, FADE = 0.6;
+
+/* Quantos segundos de história cabem num segundo de filme.
+   Esta cena mete uma hora — das 6h às 7h de 12 de junho de 1944 — em dois
+   minutos, então o fator é 30. Não é enfeite de documentação: sem ele a
+   validação não tem como saber se uma perna está com o tempo errado. Um
+   pelotão que anda 535 m em 9 s de filme está a 214 km/h na tela e a
+   7 km/h na história, e as duas leituras são verdadeiras — só que a
+   primeira não diz nada e a segunda diz tudo. Com o fator declarado, a
+   validação divide e reclama do que é de verdade um erro de digitação. */
+var ESCALA_TEMPO = 1;
+
+function suave(x) { return x * x * (3 - 2 * x); }
+
+function cameraNoTempo(t) {
+  var K = CAM_CHAVES;
+  if (!K.length) return null;
+  if (t <= K[0].t) return K[0];
+  if (t >= K[K.length - 1].t) return K[K.length - 1];
+  for (var i = 0; i < K.length - 1; i++) {
+    if (t >= K[i].t && t <= K[i + 1].t) {
+      var a = K[i], b = K[i + 1];
+      if (b.corte) return a;                       // corte seco: segura em A até o instante de B
+      var d = b.t - a.t, f = d > 0 ? (t - a.t) / d : 1;
+      if (b.suave !== false) f = suave(f);
+      return { lon: a.lon + (b.lon - a.lon) * f,
+               lat: a.lat + (b.lat - a.lat) * f,
+               larguraM: Math.exp(Math.log(a.larguraM) + (Math.log(b.larguraM) - Math.log(a.larguraM)) * f),
+               placa: f < 0.5 ? a.placa : b.placa };
+    }
+  }
+  return K[K.length - 1];
+}
+function aplicaCamera(t) {
+  if (!CAM_PRESA || !CAM_CHAVES.length) return;
+  var c = cameraNoTempo(t);
+  if (!c) return;
+  poeCamera(c.lon, c.lat, c.larguraM);
+  if (c.placa !== undefined) CENA_PLACA = c.placa || null;
+}
+
+/* Quanto a unidade aparece no instante t: 0 antes de entrar, 1 em cena,
+   0 depois de sair, com uma esmaecida curta nas pontas. Sem isto, numa
+   cena de dois minutos toda unidade fica plantada no mapa desde o
+   segundo zero — inclusive a que só chega às 7h. É função pura de t,
+   como tudo o mais. */
+function visibilidade(u, t) {
+  var v = u.opacity;
+  if (u.entra !== null) {
+    if (t < u.entra) return 0;
+    if (t < u.entra + FADE) v *= (t - u.entra) / FADE;
+  }
+  if (u.sai !== null) {
+    if (t > u.sai + FADE) return 0;
+    if (t > u.sai) v *= 1 - (t - u.sai) / FADE;
+  }
+  return v;
+}
+
+/* ---------------- o relógio ---------------- */
+function seek(t) {
+  T = Math.max(0, +t || 0);
+  for (var i = 0; i < UNIDADES.length; i++) {
+    var u = UNIDADES[i];
+    var p = temRota(u) ? posicaoNoTempo(u, T) : null;
+    if (p) {
+      u._l = lonDe(p.x); u._t = latDe(p.y); u._h = p.h + u.spin; u._parado = !!p.parado;
+    } else {
+      u._l = u.lon; u._t = u.lat; u._h = u.heading + u.spin; u._parado = true;
+    }
+  }
+  aplicaCamera(T);
+  sincronizaBarra();
+}
+
+/* =====================================================================
+   O DESENHO
+   ===================================================================== */
+function desenhaPlaca(nome) {
+  var p = placaPara(nome);
+  ctx.fillStyle = '#93a054'; ctx.fillRect(0, 0, CW, CH);
+  if (!p) return;
+  var im = IMAGENS['placa:' + p.nome];
+  if (!im) return;
+  var e = p.extensao3857;
+  var a = paraTelaXY(e[0], e[3]), b = paraTelaXY(e[2], e[1]);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(im, a[0], a[1], b[0] - a[0], b[1] - a[1]);
+}
+
+function desenhaTrajetos() {
+  ctx.save();
+  ctx.setLineDash([7 * DPR, 6 * DPR]); ctx.lineWidth = 1.6 * DPR;
+  for (var i = 0; i < UNIDADES.length; i++) {
+    var u = UNIDADES[i], P = pernas(u);
+    var tipo = tipoPorId(u.type);
+    var cor = (tipo && tipo.lado === 'eixo') ? 'rgba(124,59,42,.85)' : 'rgba(31,56,90,.85)';
+    for (var n = 0; n < P.length; n++) {
+      var r = P[n];
+      if (r.points.length < 2) continue;
+      ctx.strokeStyle = cor;
+      ctx.setLineDash([7 * DPR, 6 * DPR]);
+      var a = amostraRota(r);
+      ctx.beginPath();
+      for (var j = 0; j < a.pts.length; j += 2) {
+        var s = paraTelaXY(a.pts[j][0], a.pts[j][1]);
+        j === 0 ? ctx.moveTo(s[0], s[1]) : ctx.lineTo(s[0], s[1]);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (var w = 0; w < r.points.length; w++) {
+        var q = paraTela(r.points[w][0], r.points[w][1]);
+        ctx.fillStyle = '#f3efe1'; ctx.strokeStyle = cor;
+        ctx.beginPath(); ctx.arc(q[0], q[1], 3.4 * DPR, 0, 6.2832); ctx.fill(); ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+/* =====================================================================
+   O GRUPO
+
+   Um pelotão não é um boneco: são trinta homens, e desenhar um ícone só
+   onde havia trinta homens é a diferença entre um mapa de tática e um
+   mapa de videogame. Mas trinta unidades independentes na cena JSON são
+   trinta rotas para escrever e trinta para corrigir quando o tempo muda.
+
+   Então o grupo é UMA unidade com UMA rota, e n soldados desenhados em
+   volta do ponto dela. A formação é calculada no referencial da unidade
+   — +y é para onde ela vai, +x é a direita dela — e depois girada pelo
+   rumo, então a coluna vira junto na esquina, como coluna de verdade.
+
+   O deslocamento de cada homem é função pura do ÍNDICE e da semente, não
+   sorteado a cada quadro: sem isso a tropa treme feito estática de
+   televisão entre um quadro e o outro do vídeo. */
+function formacao(g, i) {
+  var n = g.n, e = g.espalhoM, s = _sal2(i, g.semente);
+  var tx = 0, ty = 0;
+  if (g.formacao === 'linha') {
+    tx = (i - (n - 1) / 2) * e * 0.55;
+    ty = (s - 0.5) * e * 0.30;
+  } else if (g.formacao === 'cunha') {
+    var lado = (i % 2) ? 1 : -1, passo = Math.ceil(i / 2);
+    tx = lado * passo * e * 0.42;
+    ty = -passo * e * 0.38 + (s - 0.5) * e * 0.18;
+  } else if (g.formacao === 'nuvem') {
+    var ang = _sal2(i, g.semente + 31) * 6.2832, raio = Math.sqrt(_sal2(i, g.semente + 57)) * e;
+    tx = Math.cos(ang) * raio; ty = Math.sin(ang) * raio;
+  } else {                                     // 'coluna': duas filas escalonadas, dos dois lados da estrada
+    var fila = (i % 2) ? 1 : -1, fundo = Math.floor(i / 2);
+    tx = fila * e * 0.26 + (s - 0.5) * e * 0.14;
+    ty = -fundo * e * 0.52 - (i % 2) * e * 0.26;
+  }
+  return [tx, ty];
+}
+/* um valor estável em [0,1) para um par de inteiros — o mesmo papel do
+   _sal do textura.py, e pelo mesmo motivo: dado viciado que não muda */
+function _sal2(a, b) {
+  var h = (a * 374761393 + b * 668265263) | 0;
+  h = (h ^ (h >>> 13)) * 1274126177 | 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function desenhaUnidade(u, baixas) {
+  if (!u.on) return;
+  var morta = baixas[u.id];
+  if (morta !== undefined && T >= morta) return;
+  var alfa = visibilidade(u, T);
+  if (alfa <= 0.002) return;
+  var e = k(), lat = u._t;
+  /* o desenho do parado é outro: em pé quando anda, de bruços quando está
+     preso na vala. A narração passa 40 s inteiros nisso */
+  var im = (u._parado && u.imgEspera && IMAGENS[u.imgEspera]) ? IMAGENS[u.imgEspera] : imagemDe(u);
+  var prop = im.height / im.width;
+  var s = paraTela(u._l, lat);
+  var g = u.grupo;
+  var largUm = chao((g ? (u.sizeM / Math.max(1.6, Math.sqrt(g.n))) : u.sizeM) * ESCALA, lat) * e;
+  if (u.minPx > 0 && largUm < u.minPx * DPR) largUm = u.minPx * DPR;
+  if (largUm < 1.2) largUm = 1.2;
+  var alcance = largUm * 2 + (g ? chao(g.espalhoM * g.n, lat) * e : 0);
+  if (s[0] < -alcance || s[0] > CW + alcance || s[1] < -alcance || s[1] > CH + alcance) return;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alfa));
+  ctx.translate(s[0], s[1]);
+  ctx.rotate(u._h * GR);                      // rumo horário a partir do norte = giro da tela
+  if (!g) {
+    ctx.drawImage(im, -largUm / 2, -largUm * prop / 2, largUm, largUm * prop);
+  } else {
+    var passo = chao(1, lat) * e;              // pixels por metro de chão, nesta latitude
+    for (var i = 0; i < g.n; i++) {
+      var o = formacao(g, i);
+      ctx.save();
+      ctx.translate(o[0] * passo, -o[1] * passo);   // +y da formação é para a frente = para cima na tela
+      /* cada homem torto uns graus para o seu lado: uma fileira de
+         bonecos exatamente paralelos lê como peça de tabuleiro */
+      ctx.rotate((_sal2(i, g.semente + 91) - 0.5) * 0.34);
+      ctx.drawImage(im, -largUm / 2, -largUm * prop / 2, largUm, largUm * prop);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+  if (AJUDAS && selecionada === u.id) {
+    ctx.save();
+    ctx.strokeStyle = '#7c3b2a'; ctx.lineWidth = 2 * DPR;
+    ctx.beginPath(); ctx.arc(s[0], s[1], Math.max(largUm * 0.78, 10 * DPR), 0, 6.2832); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* o traçador e o clarão, os dois puros em (semente, idade) */
+function desenhaTiros() {
+  var tiros = todosOsTiros();
+  for (var i = 0; i < tiros.length; i++) {
+    var s = tiros[i], idade = T - s.t0;
+    if (idade < 0 || idade > s.burst + 0.9) continue;
+    var de = paraTela(s.de._l, s.de._t);
+    var alvo = s.sh.target ? unidadePorId(s.sh.target) : null;
+    var para = alvo ? paraTela(alvo._l, alvo._t)
+                    : (s.sh.toward ? paraTela(s.sh.toward[0], s.sh.toward[1]) : null);
+    if (!para) continue;
+    var tipo = tipoPorId(s.de.type), arma = tipo && tipo.arma;
+    var cor = (s.sh.cor || (arma ? arma.cor : '#f2e6b8'));
+    var grosso = (arma ? arma.grosso : 1.6) * DPR;
+    if (idade <= s.burst) {
+      var quantos = Math.max(1, Math.round((arma ? arma.cadencia : 8) * s.burst));
+      ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = cor; ctx.lineWidth = grosso;
+      for (var n = 0; n < quantos; n++) {
+        /* cada traçador tem a sua fase, tirada da semente: sem isso
+           todos saem no mesmo instante e a rajada vira um risco só */
+        var fase = ((s.semente * 37 + n * 61) % 100) / 100;
+        var u = (idade / s.burst * 1.6 + fase) % 1;
+        if (u > 0.94) continue;
+        var x0 = de[0] + (para[0] - de[0]) * u, y0 = de[1] + (para[1] - de[1]) * u;
+        var x1 = de[0] + (para[0] - de[0]) * Math.min(1, u + 0.055);
+        var y1 = de[1] + (para[1] - de[1]) * Math.min(1, u + 0.055);
+        ctx.globalAlpha = 0.35 + 0.5 * Math.sin(u * Math.PI);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    var idadeImpacto = idade - s.burst;
+    if (idadeImpacto >= 0 && idadeImpacto < 0.9) {
+      var v = 1 - idadeImpacto / 0.9;
+      var raio = (s.sh.kill ? 26 : 12) * DPR * (1.15 - v * 0.55);
+      ctx.save();
+      ctx.globalAlpha = v * v;
+      var g = ctx.createRadialGradient(para[0], para[1], 0, para[0], para[1], raio);
+      g.addColorStop(0, s.sh.kill ? '#fff3cf' : '#ffe9b8');
+      g.addColorStop(0.45, s.sh.kill ? '#e08a34' : '#d8a24a');
+      g.addColorStop(1, 'rgba(60,40,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(para[0], para[1], raio, 0, 6.2832); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+/* =====================================================================
+   AS LEGENDAS
+
+   Dois minutos de mapa sem uma palavra escrita não se acompanham: o
+   espectador vê blocos andando e não sabe que aquele é o 1º Pelotão nem
+   que aquela esquina é o objetivo. Mas legenda é CONTEÚDO, não auxílio de
+   edição — por isso não entra no mesmo interruptor das rotas e dos
+   waypoints, que existem para quem monta e somem no vídeo. Tem chave
+   própria.
+
+   Tudo aqui aparece e some por tempo, como o resto: um marco com entra e
+   sai é função pura de t.
+   ===================================================================== */
+var LEGENDAS = true, MARCOS = [], RELOGIO_INICIO = null;
+
+/* "06:00" <-> segundos desde a meia-noite. A cena escreve a hora como
+   hora, e não como 21600, porque quem escreve a cena está lendo uma
+   narração que diz "às 6h da manhã". */
+function segundosDe(hhmmTexto) {
+  var m = /^(\d{1,2})\s*[:h]\s*(\d{2})/.exec(String(hhmmTexto));
+  return m ? (+m[1]) * 3600 + (+m[2]) * 60 : null;
+}
+function hhmm(seg) {
+  var h = Math.floor(seg / 3600) % 24, m = Math.floor(seg / 60) % 60;
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+}
+
+function arredondado(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+/* O DESEMPILHAMENTO DAS ETIQUETAS
+
+   No plano aberto as etiquetas ficam longe umas das outras e não há
+   problema nenhum. No plano de 260 m, "MG 42 — Bar du Stade", "Welsh + 6"
+   e "entroncamento em T" caem no mesmo punhado de pixels e viram uma
+   mancha ilegível — justamente no instante em que o espectador mais
+   precisa ler.
+
+   Então cada etiqueta, antes de ser desenhada, sobe até achar espaço
+   livre. É guloso e resolve na ordem de desenho, que é o suficiente: o
+   número de etiquetas na tela é sempre uma dúzia, não mil. E as caixas
+   zeram a cada quadro — nada acumula entre um render e o outro. */
+var CAIXAS = [];
+function bate(a, b) {
+  return !(a[0] + a[2] < b[0] || b[0] + b[2] < a[0] || a[1] + a[3] < b[1] || b[1] + b[3] < a[1]);
+}
+function livra(x, y, w, h) {
+  var passo = h + 3 * DPR;
+  for (var tent = 0; tent < 9; tent++) {
+    var choque = false;
+    for (var i = 0; i < CAIXAS.length; i++) if (bate([x, y, w, h], CAIXAS[i])) { choque = true; break; }
+    if (!choque) break;
+    y -= passo;                                 // sobe: o espaço acima da unidade é o menos disputado
+  }
+  CAIXAS.push([x, y, w, h]);
+  return y;
+}
+
+function pilula(texto, sx, sy, opts) {
+  opts = opts || {};
+  var tam = (opts.tam || 13) * DPR;
+  ctx.font = (opts.forte ? '600 ' : '') + tam + 'px "Segoe UI", system-ui, sans-serif';
+  var larg = ctx.measureText(texto).width, padX = 7 * DPR, padY = 4 * DPR;
+  var w = larg + padX * 2, h = tam + padY * 2;
+  var x = sx - (opts.centro ? w / 2 : 0), y = sy - h / 2;
+  if (!opts.fixa) y = livra(x, y, w, h);
+  ctx.save();
+  ctx.fillStyle = 'rgba(20,32,20,.28)';
+  arredondado(x + 1.5 * DPR, y + 1.5 * DPR, w, h, 4 * DPR); ctx.fill();
+  ctx.fillStyle = opts.fundo || 'rgba(243,239,225,.93)';
+  arredondado(x, y, w, h, 4 * DPR); ctx.fill();
+  ctx.fillStyle = opts.cor || '#2b2f24';
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.fillText(texto, x + padX, y + h / 2 + 0.5 * DPR);
+  ctx.restore();
+  return w;
+}
+function apareceEm(o, t) {
+  var v = 1;
+  if (o.entra !== undefined && o.entra !== null) {
+    if (t < o.entra) return 0;
+    if (t < o.entra + FADE) v *= (t - o.entra) / FADE;
+  }
+  if (o.sai !== undefined && o.sai !== null) {
+    if (t > o.sai + FADE) return 0;
+    if (t > o.sai) v *= 1 - (t - o.sai) / FADE;
+  }
+  return v;
+}
+
+function desenhaMarcos() {
+  for (var i = 0; i < MARCOS.length; i++) {
+    var m = MARCOS[i], a = apareceEm(m, T);
+    if (a <= 0.002) continue;
+    var s = paraTela(m.lon, m.lat);
+    if (s[0] < -240 || s[0] > CW + 240 || s[1] < -140 || s[1] > CH + 140) continue;
+    ctx.save();
+    ctx.globalAlpha = a;
+    if (m.tipo === 'objetivo') {
+      /* o alvo: dois anéis, e um X quando já foi tomado */
+      var tomado = m.tomado !== null && m.tomado !== undefined && T >= m.tomado;
+      ctx.strokeStyle = tomado ? '#3f6f3a' : '#7c3b2a';
+      ctx.lineWidth = 2.2 * DPR;
+      ctx.beginPath(); ctx.arc(s[0], s[1], 13 * DPR, 0, 6.2832); ctx.stroke();
+      ctx.beginPath(); ctx.arc(s[0], s[1], 5 * DPR, 0, 6.2832); ctx.stroke();
+      if (tomado) {
+        ctx.beginPath();
+        ctx.moveTo(s[0] - 9 * DPR, s[1] - 9 * DPR); ctx.lineTo(s[0] + 9 * DPR, s[1] + 9 * DPR);
+        ctx.moveTo(s[0] + 9 * DPR, s[1] - 9 * DPR); ctx.lineTo(s[0] - 9 * DPR, s[1] + 9 * DPR);
+        ctx.stroke();
+      }
+      if (m.texto) pilula(m.texto, s[0], s[1] - 28 * DPR, { centro: true, forte: true, tam: 12 });
+    } else if (m.texto) {
+      pilula(m.texto, s[0], s[1], { centro: true, tam: m.tam || 12, cor: m.cor || '#4a4738' });
+    }
+    ctx.restore();
+  }
+}
+
+function desenhaRotulos(baixas) {
+  for (var i = 0; i < UNIDADES.length; i++) {
+    var u = UNIDADES[i];
+    if (!u.rotulo || !u.on) continue;
+    /* a etiqueta morre com a unidade. Sem isto "MG 42 — Bar du Stade"
+       continua flutuando sobre a esquina meio minuto depois de a granada
+       ter calado a metralhadora, e o mapa passa a mentir por escrito. */
+    var morta = baixas[u.id];
+    if (morta !== undefined && T >= morta) continue;
+    var a = visibilidade(u, T);
+    if (a <= 0.002) continue;
+    var s = paraTela(u._l, u._t);
+    if (s[0] < -240 || s[0] > CW + 240 || s[1] < -140 || s[1] > CH + 140) continue;
+    var tipo = tipoPorId(u.type);
+    var cor = tipo && tipo.lado === 'eixo' ? '#6b2f22' : '#22405f';
+    ctx.save(); ctx.globalAlpha = a;
+    pilula(u.rotulo, s[0], s[1] - 24 * DPR, { centro: true, tam: 12, forte: true, cor: cor });
+    ctx.restore();
+  }
+}
+
+/* O relógio da HISTÓRIA, não o do filme.
+   A barra embaixo conta segundos de vídeo; isto conta a manhã. Sem ele,
+   "às 6h lançam o ataque" e "às 7h fazem a ligação" são duas frases da
+   narração sem nada no mapa que as confirme. A conta é o tempo de cena
+   vezes a compressão declarada — o mesmo número que a validação usa para
+   saber se um pelotão está andando rápido demais. Um número só, servindo
+   para as duas coisas, é um número que não pode ficar desatualizado. */
+function desenhaRelogio() {
+  if (RELOGIO_INICIO === null) return;
+  var seg = RELOGIO_INICIO + T * ESCALA_TEMPO;
+  var h = Math.floor(seg / 3600) % 24, m = Math.floor(seg / 60) % 60;
+  var txt = (h < 10 ? '0' : '') + h + 'h' + (m < 10 ? '0' : '') + m;
+  ctx.save();
+  ctx.font = '600 ' + 20 * DPR + 'px "Segoe UI", system-ui, sans-serif';
+  var w = ctx.measureText('00h00').width + 14 * DPR;
+  pilula(txt, CW - 18 * DPR - w, 32 * DPR, { tam: 20, forte: true, fixa: true });
+  ctx.restore();
+}
+
+function desenha() {
+  if (!CW) return;
+  desenhaPlaca(CENA_PLACA);
+  if (AJUDAS) desenhaTrajetos();
+  var baixas = mapaDeBaixas();
+  for (var i = 0; i < UNIDADES.length; i++) desenhaUnidade(UNIDADES[i], baixas);
+  desenhaTiros();
+  if (LEGENDAS) { CAIXAS.length = 0; desenhaMarcos(); desenhaRotulos(baixas); desenhaRelogio(); }
+}
+var CENA_PLACA = null;
+
+/* =====================================================================
+   A CENA, COMO DADO
+   ===================================================================== */
+function objetoDaCena() {
+  var camera;
+  if (CAM_CHAVES.length) {
+    /* uma cena com chaves EXPORTA AS CHAVES, não o instante em que o
+       relógio parou. Exportar a câmera calculada destruiria o movimento:
+       reabrir a cena daria uma câmera parada no segundo em que se salvou */
+    camera = { chaves: CAM_CHAVES.map(function (c) {
+      var o = { t: +(+c.t).toFixed(2), lon: +(+c.lon).toFixed(6), lat: +(+c.lat).toFixed(6),
+                larguraM: Math.round(c.larguraM) };
+      if (c.corte) o.corte = true;
+      if (c.suave === false) o.suave = false;
+      if (c.placa) o.placa = c.placa;
+      return o;
+    }) };
+  } else {
+    camera = cameraAtual();
+    if (CENA_PLACA) camera.placa = CENA_PLACA;
+  }
+  var cena = { camera: camera, time: +T.toFixed(3), scale: ESCALA };
+  if (DURACAO_CENA) cena.duracao = DURACAO_CENA;
+  if (ESCALA_TEMPO !== 1) cena.escalaDoTempo = ESCALA_TEMPO;
+  if (RELOGIO_INICIO !== null) cena.relogio = hhmm(RELOGIO_INICIO);
+  if (MARCOS.length) cena.marcos = JSON.parse(JSON.stringify(MARCOS));
+  cena.sprites = UNIDADES.map(function (u) {
+    var d = { id: u.id, type: u.type, img: u.img,
+              lon: +u._l.toFixed(6), lat: +u._t.toFixed(6),
+              heading: +u.heading.toFixed(1), sizeM: u.sizeM };
+    if (u.imgEspera) d.imgEspera = u.imgEspera;
+    if (u.rotulo) d.rotulo = u.rotulo;
+    if (u.spin) d.spin = +u.spin.toFixed(1);
+    if (u.opacity !== 1) d.opacity = u.opacity;
+    if (u.minPx) d.minPx = u.minPx;
+    if (!u.on) d.on = false;
+    if (u.entra !== null) d.entra = u.entra;
+    if (u.sai !== null) d.sai = u.sai;
+    if (u.grupo) d.grupo = { n: u.grupo.n, espalhoM: u.grupo.espalhoM,
+                             formacao: u.grupo.formacao, semente: u.grupo.semente };
+    var P = pernas(u);
+    if (P.length) {
+      var saida = P.map(function (r) {
+        var o = {};
+        if (r.esperar > 0) { o.esperar = r.esperar; }
+        else {
+          o.points = r.points.map(function (p) { return [+p[0].toFixed(6), +p[1].toFixed(6)]; });
+          if (r.duration) o.duration = r.duration;
+          if (r.speedKmh) o.speedKmh = r.speedKmh;
+          if (r.loop) o.loop = true;
+        }
+        if (r.start !== null) o.start = r.start;
+        return o;
+      });
+      d.route = saida.length === 1 ? saida[0] : saida;   // um passo só sai como objeto
+    }
+    if (u.shots && u.shots.length) d.shots = JSON.parse(JSON.stringify(u.shots));
+    return d;
+  });
+  return cena;
+}
+
+/* A validação. Roda em milissegundos e reprova a cena antes de qualquer
+   pixel: é ela que deixa conferir o filme sem assistir ao filme. */
+function validaCena(sc) {
+  if (typeof sc === 'string') sc = JSON.parse(sc);
+  var erros = [], avisos = [], ids = {}, lista = (sc && sc.sprites) || [];
+  var esc = (sc && sc.escalaDoTempo > 0) ? +sc.escalaDoTempo : 1;
+  /* Os ids TODOS antes de checar qualquer um.
+     Montar este conjunto dentro do mesmo laço que valida fazia o alvo de
+     um tiro parecer inexistente só por estar mais abaixo no arquivo — e
+     aí o aviso que existe para pegar um id digitado errado passava a
+     aparecer doze vezes numa cena correta, que é o mesmo que não existir. */
+  var conhecidos = {};
+  for (var z0 = 0; z0 < lista.length; z0++) if (lista[z0].id) conhecidos[lista[z0].id] = true;
+  var lim = PLACAS.length ? PLACAS[0].limites : null;
+  for (var i = 0; i < PLACAS.length; i++) {
+    var L = PLACAS[i].limites;
+    lim = { oeste: Math.min(lim.oeste, L.oeste), leste: Math.max(lim.leste, L.leste),
+            sul: Math.min(lim.sul, L.sul), norte: Math.max(lim.norte, L.norte) };
+  }
+  function foraDoMapa(lon, lat) {
+    return lim && (lon < lim.oeste || lon > lim.leste || lat < lim.sul || lat > lim.norte);
+  }
+  for (var a = 0; a < lista.length; a++) {
+    var s = lista[a], quem = s.id || a;
+    if (!s.id) erros.push('unidade ' + a + ': sem id');
+    else if (ids[s.id]) erros.push('id repetido "' + s.id + '"');
+    ids[s.id] = true;
+    if (s.type && !tipoPorId(s.type)) avisos.push(quem + ': tipo "' + s.type + '" não está no catálogo');
+    if (s.img && !IMAGENS[s.img]) avisos.push(quem + ': a imagem "' + s.img + '" não está neste arquivo (vai de ficha)');
+    if (!(s.sizeM > 0) && !(s.type && tipoPorId(s.type))) avisos.push(quem + ': sem sizeM e sem tipo');
+    /* o erro que só apareceria no vídeo: a unidade está fora da placa e
+       o quadro sai vazio sem ninguém entender por quê */
+    if (s.lon !== undefined && foraDoMapa(+s.lon, +s.lat))
+      erros.push(quem + ': está fora do mapa (' + s.lon + ', ' + s.lat + ')');
+    if (s.imgEspera && !IMAGENS[s.imgEspera])
+      avisos.push(quem + ': a imagem de espera "' + s.imgEspera + '" não está neste arquivo');
+    if (s.grupo) {
+      if (!(s.grupo.n > 0)) erros.push(quem + ': grupo sem n');
+      else if (s.grupo.n > 60) avisos.push(quem + ': grupo de ' + s.grupo.n + ' — acima de 60 o desenho custa e ninguém conta');
+      if (s.grupo.formacao && ['coluna', 'linha', 'cunha', 'nuvem'].indexOf(s.grupo.formacao) < 0)
+        avisos.push(quem + ': formação "' + s.grupo.formacao + '" não existe — vai de coluna');
+    }
+    if (s.entra !== undefined && s.sai !== undefined && +s.sai <= +s.entra)
+      erros.push(quem + ': sai (' + s.sai + ') não é depois de entra (' + s.entra + ')');
+
+    var P = !s.route ? [] : (Array.isArray(s.route) ? s.route : [s.route]);
+    var n = 0, fimAnterior = null, relogio = 0, fimAnteriorT = null;
+    for (var g = 0; g < P.length; g++) {
+      var r = P[g], pts = r.points || [], espera = !!(r.esperar > 0);
+      var rotulo = P.length > 1 ? (' do passo ' + (g + 1)) : ' da rota';
+      if (r.start !== undefined && r.start !== null) {
+        if (fimAnteriorT !== null && +r.start < fimAnteriorT - 1e-6)
+          erros.push(quem + ': o passo ' + (g + 1) + ' tem start ' + r.start +
+                     ' mas o anterior só acaba em ' + fimAnteriorT.toFixed(1) + ' s');
+        relogio = +r.start;
+      }
+      if (espera) {
+        if (pts.length) avisos.push(quem + ': o passo ' + (g + 1) + ' tem esperar E pontos — os pontos são ignorados');
+        relogio += +r.esperar;
+        fimAnteriorT = relogio;
+        continue;
+      }
+      if (!pts.length) { avisos.push(quem + ': o passo ' + (g + 1) + ' não anda nem espera'); continue; }
+      for (var w = 0; w < pts.length; w++)
+        if (foraDoMapa(pts[w][0], pts[w][1]))
+          erros.push(quem + ': o ponto ' + w + rotulo + ' está fora do mapa');
+      if (pts.length === 1) avisos.push(quem + ': passo com um ponto só não move nada');
+      if (pts.length > 1 && !(r.duration > 0) && !(r.speedKmh > 0))
+        avisos.push(quem + ':' + rotulo + ' sem duration nem speedKmh — vai durar 1 s');
+      /* o erro que teleporta a unidade: o passo seguinte começa longe de
+         onde o anterior parou, e no vídeo o pelotão pula a rua inteira num
+         quadro. 25 m é a folga de quem digitou a coordenada de novo. */
+      if (fimAnterior && pts.length) {
+        var d = Math.hypot((pts[0][0] - fimAnterior[0]) * 72670, (pts[0][1] - fimAnterior[1]) * 111132);
+        if (d > 25) avisos.push(quem + ': o passo ' + (g + 1) + ' começa a ' + Math.round(d) +
+                                ' m de onde o anterior parou — a unidade vai saltar');
+      }
+      /* a velocidade que denuncia o tempo errado: 25 km/h é corrida de
+         cavalo, e paraquedista carregado faz 4 a 6 km/h. Quase sempre é
+         duration pequeno demais, não a rota */
+      var dur = r.duration > 0 ? +r.duration : null;
+      if (dur && pts.length > 1) {
+        var met = 0;
+        for (var q = 1; q < pts.length; q++)
+          met += Math.hypot((pts[q][0] - pts[q - 1][0]) * 72670, (pts[q][1] - pts[q - 1][1]) * 111132);
+        /* a velocidade que importa é a da HISTÓRIA, não a da tela: o
+           filme comprime, e comparar a velocidade de tela com a de um
+           homem a pé reclamaria de todas as pernas de toda cena
+           comprimida, o que é o mesmo que não reclamar de nenhuma */
+        var kmh = met / dur * 3.6 / esc;
+        if (kmh > 15) avisos.push(quem + ': o passo ' + (g + 1) + ' sai a ' + kmh.toFixed(1) +
+                                  ' km/h de verdade (' + Math.round(met) + ' m em ' + dur +
+                                  ' s de filme x' + esc + ') — infantaria faz 4 a 6');
+        else if (kmh < 0.8 && met > 30) avisos.push(quem + ': o passo ' + (g + 1) + ' sai a ' + kmh.toFixed(1) +
+                                  ' km/h de verdade — mais devagar que andar, confira a duração');
+      }
+      if (pts.length) fimAnterior = pts[pts.length - 1];
+      relogio += dur || 1;
+      fimAnteriorT = relogio;
+      n += pts.length;
+    }
+    for (var j = 0; s.shots && j < s.shots.length; j++) {
+      var sh = s.shots[j];
+      if (sh.t === undefined && sh.at === undefined) erros.push(quem + ' tiro ' + j + ': sem at nem t');
+      if (sh.at !== undefined && (sh.at < 0 || sh.at >= Math.max(1, n)))
+        erros.push(quem + ' tiro ' + j + ': at ' + sh.at + ' fora da rota (' + n + ' pontos)');
+      if (!sh.target && !sh.toward) erros.push(quem + ' tiro ' + j + ': sem target nem toward');
+      if (sh.target && !conhecidos[sh.target] && !unidadePorId(sh.target))
+        avisos.push(quem + ' tiro ' + j + ': o alvo "' + sh.target + '" não está na cena');
+      if (s.type && !(tipoPorId(s.type) && tipoPorId(s.type).arma))
+        avisos.push(quem + ': atira, mas o tipo não tem arma');
+    }
+  }
+  var M = (sc && sc.marcos) || [];
+  for (var q2 = 0; q2 < M.length; q2++) {
+    if (foraDoMapa(+M[q2].lon, +M[q2].lat))
+      erros.push('marco ' + q2 + ' ("' + (M[q2].texto || '') + '"): está fora do mapa');
+    if (M[q2].tipo && ['lugar', 'objetivo'].indexOf(M[q2].tipo) < 0)
+      avisos.push('marco ' + q2 + ': tipo "' + M[q2].tipo + '" não existe — vai de lugar');
+  }
+  if (sc && sc.relogio && segundosDe(sc.relogio) === null)
+    erros.push('relogio: "' + sc.relogio + '" não é uma hora (use "06:00")');
+
+  /* a câmera também é dado, e também erra */
+  var K = (sc && sc.camera && sc.camera.chaves) || [];
+  for (var c = 0; c < K.length; c++) {
+    var ch = K[c];
+    if (!(ch.t >= 0)) erros.push('câmera ' + c + ': sem t');
+    if (c > 0 && ch.t <= K[c - 1].t) erros.push('câmera ' + c + ': t ' + ch.t + ' não é depois da chave anterior');
+    if (foraDoMapa(+ch.lon, +ch.lat)) erros.push('câmera ' + c + ': olha para fora do mapa');
+    if (!(ch.larguraM > 0)) erros.push('câmera ' + c + ': sem larguraM');
+    else if (ch.larguraM < 60) avisos.push('câmera ' + c + ': ' + ch.larguraM + ' m é zoom de mais que a placa aguenta (0,27 m/px)');
+    else if (ch.larguraM > 3180) avisos.push('câmera ' + c + ': ' + ch.larguraM + ' m é mais largo que a placa (3180 m) — vai sobrar fundo');
+    /* o enjoo: uma viagem longa num tempo curto vira chicote na tela */
+    if (c > 0) {
+      var ant = K[c - 1], dt = ch.t - ant.t;
+      var metros = Math.hypot((ch.lon - ant.lon) * 72670, (ch.lat - ant.lat) * 111132);
+      if (dt > 0 && !ch.corte && metros / dt > 260)
+        avisos.push('câmera ' + c + ': anda ' + Math.round(metros) + ' m em ' + dt.toFixed(1) +
+                    ' s — rápido demais; use corte:true ou dê mais tempo');
+    }
+  }
+  return { ok: !erros.length, errors: erros, warnings: avisos };
+}
+
+function loadCena(sc) {
+  if (typeof sc === 'string') sc = JSON.parse(sc);
+  pausa();
+  if (sc.sprites) {
+    UNIDADES.length = 0;
+    for (var i = 0; i < sc.sprites.length; i++) UNIDADES.push(fazUnidade(sc.sprites[i]));
+    selecionada = null;
+  }
+  DURACAO_CENA = sc.duracao > 0 ? +sc.duracao : 0;
+  ESCALA_TEMPO = sc.escalaDoTempo > 0 ? +sc.escalaDoTempo : 1;
+  RELOGIO_INICIO = sc.relogio ? segundosDe(sc.relogio) : null;
+  MARCOS = (sc.marcos || []).map(function (m) {
+    return { lon: +m.lon, lat: +m.lat, texto: m.texto || '', tipo: m.tipo || 'lugar',
+             entra: m.entra === undefined ? null : +m.entra,
+             sai: m.sai === undefined ? null : +m.sai,
+             tomado: m.tomado === undefined ? null : +m.tomado,
+             tam: m.tam, cor: m.cor };
+  });
+  CAM_CHAVES = [];
+  if (sc.camera) {
+    if (sc.camera.chaves && sc.camera.chaves.length) {
+      CAM_CHAVES = sc.camera.chaves.map(function (c) {
+        return { t: +c.t || 0, lon: +c.lon, lat: +c.lat, larguraM: +c.larguraM,
+                 corte: !!c.corte, suave: c.suave, placa: c.placa || null };
+      }).sort(function (a, b) { return a.t - b.t; });
+      CAM_PRESA = true;
+    } else {
+      CENA_PLACA = sc.camera.placa || null;
+      poeCamera(sc.camera.lon !== undefined ? +sc.camera.lon : lonDe(cam.x),
+                sc.camera.lat !== undefined ? +sc.camera.lat : latDe(cam.y),
+                sc.camera.larguraM);
+    }
+  }
+  if (sc.scale > 0) ESCALA = +sc.scale;
+  var chk = validaCena(sc);
+  if (!chk.ok) console.warn('loadCena: ' + chk.errors.join('; '));
+  else if (chk.warnings.length) console.info('loadCena: ' + chk.warnings.join('; '));
+  sincronizaCamBotao();
+  seek(sc.time || 0);
+  sincronizaFicha();
+  desenha();
+  return true;
+}
+
+/* ---------------- cenas prontas ----------------
+   JSON puro, da mesma forma que loadCena aceita e exportCena devolve —
+   uma cena montada na tela pode ser colada aqui, e uma cena escrita aqui
+   pode ser aberta, editada e exportada. */
+var CENAS = __CENAS_JSON__;
+function cena(nome) {
+  if (nome === 'limpar') {
+    UNIDADES.length = 0; MARCOS = []; CAM_CHAVES = []; RELOGIO_INICIO = null;
+    selecionada = null; sincronizaCamBotao(); seek(0); desenha(); return true;
+  }
+  var c = CENAS[nome];
+  if (!c) return false;
+  return loadCena(JSON.parse(JSON.stringify(c)));
+}
+
+/* =====================================================================
+   O QUE A TELA FAZ
+   ===================================================================== */
+var arrastando = false, arrastouX = 0, arrastouY = 0, moveu = false, modoRota = false;
+
+TELA.addEventListener('mousedown', function (e) {
+  if (modoRota) return;
+  arrastando = true; moveu = false; arrastouX = e.clientX; arrastouY = e.clientY;
+  TELA.classList.add('arrastando');
+});
+window.addEventListener('mousemove', function (e) {
+  if (!arrastando) return;
+  var dx = (e.clientX - arrastouX) * DPR, dy = (e.clientY - arrastouY) * DPR;
+  if (Math.abs(dx) + Math.abs(dy) > 3) { moveu = true; soltaCamera(); }
+  cam.x -= dx / k(); cam.y += dy / k();
+  arrastouX = e.clientX; arrastouY = e.clientY;
+  desenha();
+});
+window.addEventListener('mouseup', function () { arrastando = false; TELA.classList.remove('arrastando'); });
+
+TELA.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  /* o zoom ancora no ponto sob o cursor: o que estava debaixo do mouse
+     continua debaixo do mouse */
+  var sx = e.clientX * DPR, sy = e.clientY * DPR;
+  soltaCamera();
+  var antes = doMundo(sx, sy);
+  cam.w *= Math.exp(e.deltaY * 0.0012);
+  cam.w = Math.max(30, Math.min(cam.w, 200000));
+  var depois = doMundo(sx, sy);
+  cam.x += antes[0] - depois[0]; cam.y += antes[1] - depois[1];
+  desenha();
+}, { passive: false });
+
+TELA.addEventListener('click', function (e) {
+  var sx = e.clientX * DPR, sy = e.clientY * DPR;
+  if (modoRota && selecionada) { cliqueDeRota(sx, sy); return; }
+  if (moveu) return;
+  var achou = null, melhor = 1e9;
+  for (var i = 0; i < UNIDADES.length; i++) {
+    var u = UNIDADES[i], s = paraTela(u._l, u._t);
+    var d = Math.hypot(s[0] - sx, s[1] - sy);
+    var raio = Math.max(14 * DPR, chao(u.sizeM * ESCALA, u._t) * k() * 0.6);
+    if (d < raio && d < melhor) { melhor = d; achou = u.id; }
+  }
+  selecionada = achou; sincronizaFicha(); desenha();
+});
+
+/* no modo rota: clicar longe põe um waypoint, clicar EM CIMA de um
+   waypoint marca um tiro ali — o mesmo gesto do Globe Studio */
+function cliqueDeRota(sx, sy) {
+  var u = unidadePorId(selecionada);
+  if (!u) return;
+  if (!u.route || !u.route.length)
+    u.route = [clonaPasso({ points: [[u.lon, u.lat]], speedKmh: 4 })];
+  /* desenhar à mão mexe sempre no último passo ANDANTE: um passo de
+     espera não tem onde pôr ponto. Quem quer um passo novo acrescenta no
+     JSON, que é onde a edição mora de verdade */
+  var iUlt = -1;
+  for (var z = 0; z < u.route.length; z++) if (andante(u.route[z]) || u.route[z].points.length) iUlt = z;
+  if (iUlt < 0) { u.route.push(clonaPasso({ points: [[u._l, u._t]], speedKmh: 4 })); iUlt = u.route.length - 1; }
+  var r = u.route[iUlt], visto = 0, k2;
+  for (k2 = 0; k2 < iUlt; k2++) visto += u.route[k2].points.length;
+  for (var w = 0; w < r.points.length; w++) {
+    var q = paraTela(r.points[w][0], r.points[w][1]);
+    if (Math.hypot(q[0] - sx, q[1] - sy) < 11 * DPR) {
+      u.shots = u.shots || [];
+      u.shots.push({ at: visto + w, burst: 0.6 });
+      seek(T); desenha(); return;
+    }
+  }
+  var m = doMundo(sx, sy);
+  r.points.push([+lonDe(m[0]).toFixed(6), +latDe(m[1]).toFixed(6)]);
+  r._cache = null;
+  seek(T); desenha();
+}
+
+/* =====================================================================
+   OS BOTÕES
+   ===================================================================== */
+var btTocar = document.getElementById('btTocar'), linha = document.getElementById('linha'),
+    cursor = document.getElementById('cursor'), relogio = document.getElementById('relogio');
+var rafId = null, ultimo = 0;
+function toca() {
+  if (TOCANDO) return;
+  TOCANDO = true; btTocar.textContent = '❚❚'; ultimo = performance.now();
+  rafId = requestAnimationFrame(passo);
+}
+function pausa() { TOCANDO = false; btTocar.textContent = '▶'; if (rafId) cancelAnimationFrame(rafId); rafId = null; }
+function passo(agora) {
+  if (!TOCANDO) return;
+  var dt = Math.min(0.1, (agora - ultimo) / 1000); ultimo = agora;
+  var fim = fimDaCena();
+  seek(T + dt);
+  if (T >= fim) { seek(fim); pausa(); }
+  desenha();
+  if (TOCANDO) rafId = requestAnimationFrame(passo);
+}
+function sincronizaBarra() {
+  var fim = fimDaCena();
+  cursor.style.left = (Math.min(1, T / fim) * 100) + '%';
+  relogio.textContent = T.toFixed(2) + ' / ' + fim.toFixed(2) + ' s';
+}
+btTocar.onclick = function () { TOCANDO ? pausa() : toca(); };
+document.getElementById('btInicio').onclick = function () { pausa(); seek(0); desenha(); };
+linha.onclick = function (e) {
+  var r = linha.getBoundingClientRect();
+  pausa(); seek((e.clientX - r.left) / r.width * fimDaCena()); desenha();
+};
+
+var painelTropas = document.getElementById('tropas');
+document.getElementById('btTropas').onclick = function () {
+  painelTropas.classList.toggle('aberto');
+  this.classList.toggle('on', painelTropas.classList.contains('aberto'));
+};
+var btRota = document.getElementById('btRota');
+btRota.onclick = function () {
+  modoRota = !modoRota; this.classList.toggle('on', modoRota);
+  TELA.classList.toggle('rota', modoRota);
+};
+var btTrajetos = document.getElementById('btTrajetos');
+btTrajetos.onclick = function () { AJUDAS = !AJUDAS; this.classList.toggle('on', AJUDAS); desenha(); };
+document.getElementById('btLimpar').onclick = function () { cena('limpar'); };
+
+/* Quem manda na câmera: o relógio ou a mão.
+   Com chaves na cena, os dois querem a mesma variável, e sem um dono
+   explícito arrastar o mapa durante a reprodução vira uma briga em que a
+   mão perde a cada quadro. Então: presa = o relógio manda; solta = a mão
+   manda e as chaves ficam guardadas, intactas, esperando. Arrastar ou dar
+   zoom solta sozinho, que é o que a mão quis dizer. */
+var btLeg = document.getElementById('btLeg');
+btLeg.onclick = function () { LEGENDAS = !LEGENDAS; this.classList.toggle('on', LEGENDAS); desenha(); };
+
+var btCam = document.getElementById('btCam');
+function sincronizaCamBotao() {
+  btCam.classList.toggle('on', CAM_PRESA && CAM_CHAVES.length > 0);
+  btCam.disabled = !CAM_CHAVES.length;
+  btCam.title = !CAM_CHAVES.length ? 'esta cena não tem chaves de câmera'
+              : (CAM_PRESA ? 'a câmera segue a cena (c para soltar)' : 'câmera livre (c para prender de volta)');
+}
+function soltaCamera() {
+  if (!CAM_CHAVES.length || !CAM_PRESA) return;
+  CAM_PRESA = false; sincronizaCamBotao();
+}
+btCam.onclick = function () {
+  if (!CAM_CHAVES.length) return;
+  CAM_PRESA = !CAM_PRESA; sincronizaCamBotao();
+  if (CAM_PRESA) { aplicaCamera(T); desenha(); }
+};
+
+/* o painel de tropas: uma linha por TIPO. Clicar põe a unidade no centro
+   da tela, que é onde se está olhando. */
+var lista = document.getElementById('listaTropas');
+function montaTropas() {
+  lista.innerHTML = '';
+  for (var i = 0; i < CATALOGO.length; i++) {
+    (function (tipo) {
+      var div = document.createElement('div'); div.className = 'tropa';
+      var c = document.createElement('canvas'); c.width = c.height = 60;
+      var g = c.getContext('2d');
+      var im = IMAGENS[tipo.img] || fichaDeReserva(tipo, 60);
+      var prop = im.height / im.width;
+      g.drawImage(im, 0, 30 - 30 * prop, 60, 60 * prop);
+      div.appendChild(c);
+      var txt = document.createElement('div');
+      txt.innerHTML = '<b>' + tipo.nome + '</b><br><span>' + tipo.sizeM + ' m' +
+                      (tipo.arma ? ' · ' + tipo.arma.alcanceM + ' m de alcance' : '') + '</span>';
+      div.appendChild(txt);
+      div.onclick = function () { poe(tipo.id); };
+      lista.appendChild(div);
+    })(CATALOGO[i]);
+  }
+}
+var contador = 0;
+function poe(tipoId, lon, lat) {
+  var tipo = tipoPorId(tipoId); if (!tipo) return null;
+  if (lon === undefined) { lon = lonDe(cam.x); lat = latDe(cam.y); }
+  var id = tipoId + '-' + (++contador);
+  while (unidadePorId(id)) id = tipoId + '-' + (++contador);
+  var u = fazUnidade({ id: id, type: tipoId, img: tipo.img, lon: lon, lat: lat, sizeM: tipo.sizeM });
+  UNIDADES.push(u); selecionada = id; seek(T); sincronizaFicha(); desenha();
+  return u;
+}
+
+/* a ficha da unidade selecionada */
+var ficha = document.getElementById('ficha'), fNome = document.getElementById('fichaNome');
+var fTam = document.getElementById('fTam'), fTamV = document.getElementById('fTamV');
+var fGiro = document.getElementById('fGiro'), fGiroV = document.getElementById('fGiroV');
+var fEsc = document.getElementById('fEsc'), fEscV = document.getElementById('fEscV');
+function sincronizaFicha() {
+  var u = unidadePorId(selecionada);
+  ficha.classList.toggle('aberto', !!u);
+  fEsc.value = ESCALA; fEscV.textContent = (+ESCALA).toFixed(2) + '×';
+  if (!u) return;
+  fNome.textContent = u.id;
+  fTam.value = u.sizeM; fTamV.textContent = u.sizeM + ' m';
+  fGiro.value = u.spin; fGiroV.textContent = u.spin + '°';
+}
+fTam.oninput = function () { var u = unidadePorId(selecionada); if (u) { u.sizeM = +this.value; sincronizaFicha(); desenha(); } };
+fGiro.oninput = function () { var u = unidadePorId(selecionada); if (u) { u.spin = +this.value; seek(T); sincronizaFicha(); desenha(); } };
+fEsc.oninput = function () { ESCALA = +this.value; sincronizaFicha(); desenha(); };
+document.getElementById('fApaga').onclick = function () {
+  var i = UNIDADES.findIndex(function (u) { return u.id === selecionada; });
+  if (i >= 0) UNIDADES.splice(i, 1);
+  selecionada = null; sincronizaFicha(); desenha();
+};
+
+document.addEventListener('keydown', function (e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  var u = unidadePorId(selecionada);
+  if (e.code === 'Space') { e.preventDefault(); TOCANDO ? pausa() : toca(); }
+  else if (e.key === '0') { pausa(); seek(0); desenha(); }
+  else if (e.key === 'u') document.getElementById('btTropas').onclick.call(document.getElementById('btTropas'));
+  else if (e.key === 't') btRota.onclick.call(btRota);
+  else if (e.key === 'h') btTrajetos.onclick.call(btTrajetos);
+  else if (e.key === 'c') btCam.onclick.call(btCam);
+  else if (e.key === 'l') btLeg.onclick.call(btLeg);
+  else if (e.key === 'v') { document.querySelectorAll('.painel').forEach(function (p) { p.classList.toggle('oculto'); }); }
+  else if (e.key === '[' && u) { u.sizeM = Math.max(2, u.sizeM * 0.85); sincronizaFicha(); desenha(); }
+  else if (e.key === ']' && u) { u.sizeM = u.sizeM * 1.18; sincronizaFicha(); desenha(); }
+  else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && u) {
+    u.spin += (e.key === 'ArrowLeft' ? -5 : 5); seek(T); sincronizaFicha(); desenha();
+  }
+});
+
+var selCena = document.getElementById('selCena');
+selCena.onchange = function () { if (this.value) cena(this.value); this.value = ''; };
+
+/* =====================================================================
+   A PORTA DE FORA
+   O render.mjs fala com a página só por aqui: seek(t), render() e mais
+   nada. Nenhum estado entre um quadro e o outro.
+   ===================================================================== */
+window.__mapa = {
+  seek: function (t) { seek(t); }, render: function () { desenha(); },
+  play: toca, pause: pausa,
+  loadScene: loadCena, loadCena: loadCena,
+  scene: objetoDaCena, cena: objetoDaCena,
+  exportScene: function () { return JSON.stringify(objetoDaCena(), null, 2); },
+  exportCena: function () { return JSON.stringify(objetoDaCena(), null, 2); },
+  validateScene: validaCena, validaCena: validaCena,
+  demo: cena, demos: function () { return Object.keys(CENAS); },
+  placas: function () { return PLACAS; },
+  catalogo: function () { return CATALOGO; },
+  sprites: UNIDADES,
+  spawn: poe,
+  addSprite: function (d) { var u = fazUnidade(d); UNIDADES.push(u); seek(T); desenha(); return u; },
+  setSprite: function (id, campos) {
+    var u = unidadePorId(id); if (!u) return null;
+    for (var ch in campos) if (campos.hasOwnProperty(ch)) u[ch] = campos[ch];
+    if (campos.route) u.route = clonaRota(campos.route);
+    seek(T); desenha(); return u;
+  },
+  removeSprite: function (id) {
+    var i = UNIDADES.findIndex(function (u) { return u.id === id; });
+    if (i >= 0) UNIDADES.splice(i, 1);
+    desenha(); return i >= 0;
+  },
+  setRoute: function (id, r) {
+    var u = unidadePorId(id); if (!u) return null;
+    u.route = r ? clonaRota(r) : null; seek(T); desenha(); return u;
+  },
+  camera: function (lon, lat, larguraM) { soltaCamera(); poeCamera(lon, lat, larguraM); desenha(); return cameraAtual(); },
+  chaves: function (K) {
+    if (K === undefined) return CAM_CHAVES.slice();
+    CAM_CHAVES = (K || []).map(function (c) {
+      return { t: +c.t || 0, lon: +c.lon, lat: +c.lat, larguraM: +c.larguraM,
+               corte: !!c.corte, suave: c.suave, placa: c.placa || null };
+    }).sort(function (a, b) { return a.t - b.t; });
+    CAM_PRESA = true; sincronizaCamBotao(); seek(T); desenha();
+    return CAM_CHAVES.slice();
+  },
+  set: function (o) {
+    if (o.helpers !== undefined) { AJUDAS = !!o.helpers; btTrajetos.classList.toggle('on', AJUDAS); }
+    if (o.legendas !== undefined) { LEGENDAS = !!o.legendas; btLeg.classList.toggle('on', LEGENDAS); }
+    if (o.placa !== undefined) CENA_PLACA = o.placa;
+    if (o.cameraPresa !== undefined) { CAM_PRESA = !!o.cameraPresa; sincronizaCamBotao(); if (CAM_PRESA) aplicaCamera(T); }
+    desenha();
+  },
+  info: function () {
+    var tiros = todosOsTiros(), mortes = 0, homens = 0;
+    for (var i = 0; i < tiros.length; i++) if (tiros[i].sh.kill) mortes++;
+    for (var j = 0; j < UNIDADES.length; j++) homens += UNIDADES[j].grupo ? UNIDADES[j].grupo.n : 1;
+    return { images: Object.keys(IMAGENS), sprites: UNIDADES.length, homens: homens, end: fimDaCena(),
+             shots: tiros.length, kills: mortes, placas: PLACAS.map(function (p) { return p.nome; }),
+             chavesDeCamera: CAM_CHAVES.length, cameraPresa: CAM_PRESA,
+             escalaDoTempo: ESCALA_TEMPO, marcos: MARCOS.length,
+             relogio: RELOGIO_INICIO === null ? null : hhmm(RELOGIO_INICIO),
+             camera: cameraAtual() };
+  }
+};
+
+/* =====================================================================
+   ABRIR
+   ===================================================================== */
+var aviso = document.getElementById('aviso');
+function erro(txt) { aviso.textContent = txt; aviso.style.display = 'flex'; }
+
+(function abre() {
+  if (!PLACAS.length) { erro('Nenhuma placa embutida. Rode: node tools/pack.mjs'); return; }
+  for (var n in CENAS) if (CENAS.hasOwnProperty(n)) {
+    var o = document.createElement('option'); o.value = n; o.textContent = n; selCena.appendChild(o);
+  }
+  var o2 = document.createElement('option'); o2.value = 'limpar'; o2.textContent = 'limpar o mapa'; selCena.appendChild(o2);
+
+  var faltam = PLACAS.length + Object.keys(IMG_B64).length;
+  function pronto() {
+    if (prontas < faltam) return;
+    var p = PLACAS[0];
+    /* abre na placa mais larga, inteira na tela */
+    var lon = (p.limites.oeste + p.limites.leste) / 2, lat = (p.limites.sul + p.limites.norte) / 2;
+    poeCamera(lon, lat, p.larguraKm * 1000);
+    montaTropas();
+    redimensiona();
+    seek(0);
+    desenha();
+  }
+  for (var i = 0; i < PLACAS.length; i++)
+    carregaImagem('placa:' + PLACAS[i].nome, PLACAS[i].b64, PLACAS[i].mime, pronto);
+  for (var nome in IMG_B64) if (IMG_B64.hasOwnProperty(nome)) carregaImagem(nome, IMG_B64[nome], 'image/png', pronto);
+  if (!faltam) pronto();
+})();
+</script>
+</body>
+</html>

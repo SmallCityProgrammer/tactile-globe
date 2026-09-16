@@ -1,0 +1,17 @@
+# o recorte cru do Overpass: 3,7 MB, e o fetch.mjs baixa de novo
+osm.json
+
+# os ladrilhos procedurais: o textura.py refaz em ~40 s, e a chave do cache
+# inclui o codigo, entao commitar so garantiria arquivo velho no disco
+texturas/
+
+# o que o carentan.py grava para poder estilizar
+*.gpkg
+
+# O PNG sem perda e copia de arquivo, 13 MB por quadro. O que o pack.mjs
+# precisa e o .jpg (2,9 MB, erro medio de 1,4 em 255 — medido), e o .json
+# ao lado, que e o que transforma o desenho em mapa. Esses dois ficam.
+*.png
+
+__pycache__/
+

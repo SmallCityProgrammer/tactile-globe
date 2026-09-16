@@ -1,0 +1,170 @@
+{
+  "_": [
+    "12 de junho de 1944, 6h00 às 7h00 — a Easy Company toma Carentan.",
+    "É o trecho 9:00–11:00 do vídeo, comprimido em 52 s de filme.",
+    "",
+    "Toda posição saiu do traçado das ruas de hoje, que são as mesmas: a Route",
+    "de Périers subindo do sudoeste, o entroncamento em T em -1.24963,49.30085",
+    "onde a Route d'Auvers encontra a Rue Holgate, e a Rue Holgate entrando na",
+    "cidade até a igreja. O ninho de MG 42 fica no canto do entroncamento, no",
+    "prédio que ainda hoje é o Bar du Stade.",
+    "",
+    "O relógio, em segundos de filme:",
+    "   0   a Easy sobe a estrada de Périers, vinda de La Billonnerie",
+    "   8   a MG 42 abre fogo e prende o 1º Pelotão na estrada",
+    "  12   Winters sai para o meio da estrada, sob fogo, para mover os homens",
+    "  15   Welsh e seis homens contornam pela esquerda",
+    "  23   a granada: a MG 42 é silenciada",
+    "  25   a Easy toma o entroncamento e sobe a Rue Holgate limpando prédios",
+    "  32   o morteiro alemão responde sobre o cruzamento",
+    "  40   a força que desce do norte chega; às 7h a cidade é americana"
+  ],
+  "camera": { "lon": -1.2483, "lat": 49.30235, "larguraM": 900 },
+  "time": 0,
+  "scale": 1,
+  "sprites": [
+    {
+      "id": "mg42-stade",
+      "type": "mg42",
+      "lon": -1.24928,
+      "lat": 49.30106,
+      "heading": 218,
+      "sizeM": 14,
+      "shots": [
+        { "t": 8.0,  "burst": 3.0, "target": "welsh-1pel" },
+        { "t": 13.0, "burst": 2.4, "target": "welsh-1pel" },
+        { "t": 17.5, "burst": 2.0, "target": "winters" },
+        { "t": 20.5, "burst": 1.6, "target": "welsh-1pel" }
+      ]
+    },
+    {
+      "_": "Duas pernas com um vão de 16 s entre elas: é nesse vão que o pelotão está deitado na vala, preso pela MG 42. Parado é o que a rota devolve quando o relógio cai entre uma perna e a outra — não é um estado guardado em lugar nenhum.",
+      "id": "welsh-1pel",
+      "type": "pelotao",
+      "lon": -1.25326,
+      "lat": 49.29595,
+      "heading": 40,
+      "sizeM": 30,
+      "route": [
+        {
+          "points": [
+            [-1.25326, 49.29595],
+            [-1.25273, 49.29654],
+            [-1.25110, 49.29876],
+            [-1.25035, 49.29985],
+            [-1.25010, 49.30030]
+          ],
+          "duration": 9.0,
+          "start": 0
+        },
+        {
+          "points": [
+            [-1.25010, 49.30030],
+            [-1.24963, 49.30085],
+            [-1.24871, 49.30214],
+            [-1.24802, 49.30285],
+            [-1.24705, 49.30345],
+            [-1.24590, 49.30402],
+            [-1.24510, 49.30442]
+          ],
+          "duration": 16.0,
+          "start": 25.0
+        }
+      ],
+      "shots": [
+        { "t": 28.0, "burst": 1.4, "toward": [-1.24820, 49.30262] },
+        { "t": 33.5, "burst": 1.2, "toward": [-1.24690, 49.30341] }
+      ]
+    },
+    {
+      "id": "winters",
+      "type": "paraquedista",
+      "lon": -1.25092,
+      "lat": 49.29925,
+      "heading": 40,
+      "sizeM": 16,
+      "route": {
+        "points": [
+          [-1.25092, 49.29925],
+          [-1.25055, 49.29968],
+          [-1.25022, 49.30012]
+        ],
+        "duration": 5.0,
+        "start": 12.0
+      }
+    },
+    {
+      "id": "welsh-grupo",
+      "type": "granadeiro",
+      "lon": -1.25118, "lat": 49.29886,
+      "heading": 25,
+      "sizeM": 15,
+      "route": {
+        "points": [
+          [-1.25118, 49.29886],
+          [-1.25145, 49.29955],
+          [-1.25098, 49.30035],
+          [-1.25010, 49.30086],
+          [-1.24953, 49.30098]
+        ],
+        "duration": 8.0,
+        "start": 15.0
+      },
+      "shots": [
+        { "t": 23.2, "burst": 0.7, "target": "mg42-stade", "kill": true }
+      ]
+    },
+    {
+      "id": "easy-2pel",
+      "type": "pelotao",
+      "lon": -1.25390, "lat": 49.29560,
+      "heading": 40,
+      "sizeM": 30,
+      "route": {
+        "points": [
+          [-1.25390, 49.29560],
+          [-1.25233, 49.29742],
+          [-1.25086, 49.29948],
+          [-1.24995, 49.30058],
+          [-1.24930, 49.30150],
+          [-1.24845, 49.30245],
+          [-1.24735, 49.30330]
+        ],
+        "duration": 34.0,
+        "start": 4.0
+      },
+      "shots": [
+        { "t": 30.0, "burst": 1.6, "toward": [-1.24760, 49.30300] }
+      ]
+    },
+    {
+      "id": "morteiro-de",
+      "type": "morteiro",
+      "lon": -1.24438, "lat": 49.30365,
+      "heading": 230,
+      "sizeM": 13,
+      "shots": [
+        { "t": 32.0, "burst": 0.9, "toward": [-1.24802, 49.30285] },
+        { "t": 35.5, "burst": 0.9, "toward": [-1.24705, 49.30345] }
+      ]
+    },
+    {
+      "id": "norte-401",
+      "type": "pelotao",
+      "lon": -1.24392, "lat": 49.30720,
+      "heading": 195,
+      "sizeM": 30,
+      "route": {
+        "points": [
+          [-1.24392, 49.30720],
+          [-1.24370, 49.30640],
+          [-1.24338, 49.30566],
+          [-1.24398, 49.30498],
+          [-1.24480, 49.30455]
+        ],
+        "duration": 12.0,
+        "start": 40.0
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "carentan-1944",
+  "version": "0.1.0",
+  "description": "O mapa de Carentan no estilo Operations Room, e um estudio de cena para mover assets top-down por cima dele",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pack": "node tools/pack.mjs",
+    "check": "node tools/render.mjs --check",
+    "render": "node tools/render.mjs"
+  },
+  "license": "MIT"
+}

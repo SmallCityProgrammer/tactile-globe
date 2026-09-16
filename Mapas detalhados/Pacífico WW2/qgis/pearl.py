@@ -89,6 +89,32 @@ print('faces:', faces.featureCount(), '-> terra:', terra.featureCount())
 # em volta dos galpoes. Entao ele se deduz dos predios — engorda cada um,
 # funde tudo, encolhe de volta (isso arredonda e fecha os vaos) e corta na costa.
 pred3857 = corre('native:reprojectlayer', {'INPUT': predios, 'TARGET_CRS': MERC})
+
+# ------------------------------------------- o rumo do eixo longo de cada predio
+# Para a nervura do telhado seguir o predio, e nao a tela. Tem que ser calculado
+# em 3857, que e o que o mapa desenha: em 4326 o esticao de 7,4% em Y na latitude
+# do Havai gira o angulo uns 2 graus e, pior, vira o eixo longo de 96 predios
+# quase quadrados em 90 graus inteiros — a trama correria ATRAVESSADA neles.
+# O algoritmo preserva a ordem de entrada, mas renumera os fid, entao o casamento
+# e posicional; juntar por fid daria 4 acertos em 5533.
+caixas = corre('native:orientedminimumboundingbox', {'INPUT': pred3857})
+telha = mem('predio', 'Polygon')
+telha.dataProvider().addAttributes([QgsField('rumo', QVariant.Double),
+                                    QgsField('alonga', QVariant.Double)])
+telha.updateFields()
+lote = []
+for orig, cx in zip(pred3857.getFeatures(), caixas.getFeatures()):
+    ft = QgsFeature(telha.fields())
+    ft.setGeometry(orig.geometry())
+    larg, alt = float(cx['width']), float(cx['height'])
+    # 'height' e sempre o lado longo, e 'angle' e o azimute dele, horario a partir
+    # do norte, em (0, 180] — nunca 0.
+    ft.setAttributes([float(cx['angle']), (alt / larg) if larg else 1.0])
+    lote.append(ft)
+telha.dataProvider().addFeatures(lote)
+telha.updateExtents()
+print('predios com rumo:', telha.featureCount())
+
 base = corre('native:buffer', {'INPUT': pred3857, 'DISTANCE': 85, 'SEGMENTS': 4,
                                'JOIN_STYLE': 1, 'DISSOLVE': True})
 base = corre('native:buffer', {'INPUT': base, 'DISTANCE': -58, 'SEGMENTS': 4,
@@ -126,14 +152,17 @@ if NAVIOS_ON:
 
 # ------------------------------------------------------------------- o mar
 # A agua e geometria de verdade, nao a cor de fundo: so assim ela aceita textura.
+#
+# E ela leva a TERRA COMO FUROS, o que nao e capricho: assim o shapeburst mede a
+# distancia ate a borda mais proxima, que dentro da baia e a linha de costa, e o
+# raso vira um degrade saindo de cada praia em vez de uma faixa de largura fixa.
 mar = mem('mar', 'Polygon', 'EPSG:4326')
 mg = QgsGeometry.fromRect(QgsRectangle(W - .25, S - .25, E + .25, N + .25))
 fm = QgsFeature(); fm.setGeometry(mg); mar.dataProvider().addFeature(fm)
 mar.updateExtents()
-
-# O halo de raso: e a propria terra, desenhada so como traco largo e macio,
-# por baixo dela mesma. Sai de graca e da o contorno claro da referencia.
-raso = QgsVectorLayer(terra.source(), 'raso', terra.providerType()) if terra.providerType() == 'ogr' else None
+mar = corre('native:reprojectlayer', {'INPUT': mar, 'TARGET_CRS': MERC})
+mar = corre('native:difference', {'INPUT': mar, 'OVERLAY': terra})
+mar.setName('mar')
 
 # ---------------------------------------- gravar em disco antes de estilizar
 # Camada de memoria nao sobrevive dentro de um projeto: ao reabrir o .qgz o
@@ -154,25 +183,31 @@ def grava(layer, nome):
 terra = grava(terra, 'terra')
 base = grava(base, 'base')
 mar = grava(mar, 'mar')
+predios = grava(telha, 'predio')                  # a versao com o campo 'rumo'
 if navios is not None: navios = grava(navios, 'navios')
-raso = QgsVectorLayer(terra.source(), 'raso', 'ogr')
 
 # ============================================================== VESTIR TUDO
 verde, aero, pier, via, agua_int = load('verde'), load('aero'), load('pier'), load('via'), load('agua')
 
-veste(mar, *agua(HERE))
-veste(raso, halo_raso())
-veste(terra, *costa_areia(), efeito=sombra(1.4, 3.4, SOMBRA, 0.45, 125))
-veste(base, simples(BASE))
-if verde: veste(verde, simples(MATA), copas())
-if aero:  veste(aero, simples(PISTA))
-if pier:  veste(pier, simples(CAIS, '#8a7f68', 0.12))
-if agua_int: veste(agua_int, simples(MAR_CLARO))
+veste(mar, *agua(HERE, raso_mm=7.0))
+veste(terra, *terreno(HERE), efeito=sombra(1.4, 3.4, SOMBRA, 0.45, 125))
+veste(base, *patio(HERE))
+if verde: veste(verde, *mata(HERE))
+if aero:  veste(aero, *campo(HERE))
+if pier:  veste(pier, *cais(HERE))
+if agua_int: veste(agua_int, simples(RASO))
 if via:   via_dupla(via)
-veste(predios, simples(PREDIO))
+telhados(predios, hachura=True)
 if navios is not None: veste(navios, simples('#43433f', '#1b1b1a', 0.3))
 
-ordem = [l for l in (navios, predios, via, pier, aero, agua_int, verde, base, terra, raso, mar) if l]
+# A granulacao de papel e uma camada como outra qualquer: o retangulo do mar
+# outra vez, no topo de tudo, so com o ladrilho de grao. E ela que amarra as
+# camadas — sem isso cada area parece recortada e colada por cima da outra.
+graozinho = QgsVectorLayer(mar.source(), 'papel', 'ogr')
+veste(graozinho, *papel(HERE))
+
+ordem = [l for l in (graozinho, navios, predios, via, pier, aero, agua_int,
+                     verde, base, terra, mar) if l]
 
 proj = QgsProject.instance(); proj.setCrs(MERC)
 raiz = proj.layerTreeRoot()

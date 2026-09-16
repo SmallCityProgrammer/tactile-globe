@@ -304,3 +304,62 @@ def mata_svg(pasta):
     anel = gerador('difference(buffer($geometry, {0:g}), buffer($geometry, -{0:g}))'.format(ENGORDA),
                    _fill(sorteio(copa_svg(pasta), por=ANEL_DENS, semente=ANEL_SEM)))
     return chao + [dentro, anel]
+
+
+# ============================================================== A COPA EM PNG
+# O disco chapado lia como bolinha, e o que falta nele nao e resolucao: e
+# silhueta irregular, volume e borda macia. Um PNG com alfa da as tres.
+#
+# O que se PERDE no caminho: num raster nao existe param(fill), entao nao da para
+# recolorir uma copa so por feicao como se faz no SVG. A saida e gerar uma copa
+# POR TOM e trocar o ARQUIVO por arvore — Property.Name, a mesma que troca o
+# telhado no telhado.py. E de graca, porque os PNG ficam no cache de disco.
+from qgis.core import QgsRasterMarkerSymbolLayer
+
+TAM_PNG_MIN, TAM_PNG_MAX = 1.5, 2.9   # a copa em PNG carrega a propria sombra,
+TAMANHO_PNG = 'randf({0:g}, {1:g}, @geometry_point_num)'.format(TAM_PNG_MIN, TAM_PNG_MAX)
+GIRO_PNG = 'rand(0, 359, @geometry_point_num + 31)'   # o disco nao podia girar
+
+def copas_png(pasta):
+    """Uma copa por tom da familia. Devolve a lista de caminhos."""
+    return [T.copa(pasta, 'copa%d' % i, cor=c, semente=7 + i * 13, lobos=5 + (i % 3))
+            for i, c in enumerate(COPAS)]
+
+def copa_png(pasta, desvio=0):
+    """
+    A arvore como imagem: sem camada de sombra separada, porque a sombra ja vem
+    assada no PNG, e com GIRO por arvore — que o disco nao tinha como ter e que e
+    metade do motivo de duas arvores vizinhas nao parecerem a mesma.
+    """
+    caminhos = copas_png(pasta)
+    m = QgsRasterMarkerSymbolLayer()
+    m.setPath(caminhos[0]); m.setSize(TAM_PNG_MIN); m.setSizeUnit(MM)
+    dd(m, P.Size, TAMANHO_PNG)
+    dd(m, P.Angle, GIRO_PNG)
+    dd(m, P.Name, "array_get(array('{p}'), rand(0, {n}, @geometry_point_num + {d}))".format(
+        p="','".join(c.replace(chr(92), '/') for c in caminhos),
+        n=len(caminhos) - 1, d=desvio + 505))
+    ms = QgsMarkerSymbol(); ms.deleteSymbolLayer(0); ms.appendSymbolLayer(m)
+    return ms
+
+def mata_modo(pasta, modo='circulo'):
+    """
+    A mata inteira, com a arvore escolhida por 'modo'.
+
+      nenhuma  so a chapa e a mancha — sem arvore alguma
+      circulo  os discos de sempre
+      png      a copa em imagem, com silhueta, volume e giro
+
+    O chao NAO muda entre os modos: e a mesma chapa e a mesma mancha. O que muda
+    e so o que vai por cima, para a comparacao ser honesta.
+    """
+    chao = [simples(MATA),
+            sobre(T.mancha(pasta, 'mata', base=6, oitavas=5, contraste=0.70,
+                           forca=0.28, grao=0.25, semente=5150), ESC_MATA)]
+    if modo == 'nenhuma':
+        return chao
+    faz = (lambda d=0: copa_png(pasta, d)) if modo == 'png' else (lambda d=0: copa(cor_copa(311 + d)))
+    dentro = gerador('buffer($geometry, {0:g})'.format(ENGORDA), _fill(sorteio(faz())))
+    anel = gerador('difference(buffer($geometry, {0:g}), buffer($geometry, -{0:g}))'.format(ENGORDA),
+                   _fill(sorteio(faz(700), por=ANEL_DENS, semente=ANEL_SEM)))
+    return chao + [dentro, anel]

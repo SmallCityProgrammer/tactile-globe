@@ -107,3 +107,43 @@ viewBox; o viewBox decide **quanto** estica. Um celeiro 4:1 desenhado num quadro
 **O que torna isso possível é `Property.Name`**, e não `Property.File` — este
 existe, aparece na lista como *Symbol file path*, e é um no-op silencioso. Foi
 medido no mapa irmão, não lido na documentação.
+
+---
+
+## As árvores: nenhuma, círculo ou PNG
+
+`ARVORE` no topo do `estilo.py`: **`nenhuma`**, **`circulo`** ou **`png`**.
+Trocar ali muda só a árvore — a chapa e a mancha do chão são as mesmas nos três,
+para a comparação ser honesta.
+
+O disco chapado lia como bolinha, e o que faltava nele não era resolução. Uma
+copa de verdade vista de cima tem três coisas: **silhueta irregular** (lobos, não
+círculo), **volume** (a luz bate de um lado e escurece para a borda) e **borda
+macia**. O `textura.copa()` gera isso como PNG com alfa, e o PNG entra por
+`QgsRasterMarkerSymbolLayer`.
+
+Nada disso precisa de detalhe fino: na tela a árvore tem uns 7 px no quadro
+inteiro, então o PNG de 128 px é reduzido a 7. O que sobrevive a essa redução é
+exatamente silhueta, volume e borda — e é por isso que funciona.
+
+**O que se perde no caminho:** num raster não existe `param(fill)`, então não dá
+para recolorir uma copa só por feição como se faz no SVG. A saída é gerar **uma
+copa por tom** e trocar o arquivo por árvore com `Property.Name` — a mesma
+propriedade que escolhe o telhado. Sai de graça, porque os PNG ficam em cache.
+
+**O que se ganha de brinde:** giro por árvore. O disco não tinha como girar, e
+metade do motivo de duas árvores vizinhas parecerem a mesma era essa.
+
+### Duas coisas que este teste revelou
+
+**O ladrilho da mata repetia.** A 54 mm ele cabia ~15 vezes num render de
+3000 px e a grade aparecia no zoom fechado — exatamente o problema do pátio no
+mapa irmão, que lá já tinha sido resolvido e aqui tinha passado. Subiu para
+140 mm, e o do chão para 150 mm.
+
+**A árvore é medida em milímetros de tela**, como todo o resto do projeto. Isso
+mantém a mata com a mesma cara em qualquer zoom, mas significa que aproximar
+**não** aumenta a copa: de muito perto vira um tapete denso em vez de árvores
+individuais. Se um dia se quiser árvore individual no zoom fechado, o caminho é o
+mesmo dos telhados — uma regra por escala, com o tamanho em unidades de mapa
+abaixo de um certo denominador. Não está feito.

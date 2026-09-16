@@ -64,8 +64,8 @@ TELHADOS = ['#565b5f', '#61666a', '#4c5154', '#6b7074',
             '#7d4c3f', '#5a5f63', '#8a5a48', '#52575a']
 
 # --- escalas das texturas, em milimetros de tela -----------------------------
-ESC_CAMPO  = 90.0
-ESC_MATA   = 54.0
+ESC_CAMPO  = 150.0
+ESC_MATA   = 140.0
 ESC_URBANO = 64.0
 ESC_AGUA   = 150.0
 ESC_PAPEL  = 60.0
@@ -183,7 +183,14 @@ def urbano(pasta):
     chapa.setAngle(12.0)                     # tira o alinhamento das juntas com a tela
     return [f, chapa]
 
-def mata(pasta):
+# Como a arvore e desenhada. Trocar aqui muda SO a arvore; o chao da mata e o
+# mesmo nos tres, para a comparacao ser honesta.
+#   nenhuma  so a chapa e a mancha, sem arvore alguma
+#   circulo  os discos chapados
+#   png      a copa em imagem com alfa: silhueta irregular, volume e giro
+ARVORE = 'png'
+
+def mata(pasta, modo=None):
     """
     A mata. As arvores moram em arvores.py; o import e aqui dentro porque
     arvores.py importa a paleta deste modulo, e no topo seria um ciclo.
@@ -193,7 +200,7 @@ def mata(pasta):
     verde-escura de floresta.
     """
     import arvores
-    cams = arvores.mata(pasta)
+    cams = arvores.mata_modo(pasta, modo or ARVORE)
     dd(cams[0], QgsSymbolLayer.Property.FillColor,
        paleta_por_tipo(MATAS, padrao=MATAS['mata'], desvio=911))
     return cams

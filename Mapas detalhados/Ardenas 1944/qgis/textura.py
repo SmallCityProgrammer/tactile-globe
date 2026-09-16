@@ -386,3 +386,85 @@ def apron(pasta, nome, lado=3456, placa=90, jitter=0.35, semente=1941, forca=0.1
 # numeros andam juntos.
 LADO_PATIO = 3456
 ESC_PATIO  = LADO_PATIO * 25.4 / 96.0        # 914,4 mm
+
+
+# ================================================= A COPA, EM PNG COM ALFA
+# Um disco chapado de cor unica le como bolinha, nao como arvore — foi a queixa.
+# O que falta nele nao e resolucao, e as tres coisas que uma copa de verdade tem
+# vista de cima: SILHUETA irregular (lobos, nao circulo), VOLUME (a luz bate de
+# um lado e a copa escurece para a borda) e BORDA MACIA.
+#
+# Nada disso precisa de detalhe fino: na tela a arvore tem uns 7 px no quadro
+# inteiro, entao o PNG e reduzido de 128 para 7. O que sobrevive a essa reducao e
+# exatamente silhueta, volume e borda — e e por isso que funciona.
+def _borra_np(a, r):
+    """Media movel em cruz, duas passadas. Suficiente para borrar uma sombra."""
+    if r < 1: return a
+    for _ in range(2):
+        for eixo in (0, 1):
+            n = a.shape[eixo]; k = 2 * r + 1
+            pad = [(0, 0)] * a.ndim; pad[eixo] = (r + 1, r)
+            c = np.cumsum(np.pad(a, pad, mode='edge'), axis=eixo, dtype=np.float32)
+            i1 = [slice(None)] * a.ndim; i1[eixo] = slice(k, k + n)
+            i0 = [slice(None)] * a.ndim; i0[eixo] = slice(0, n)
+            a = (c[tuple(i1)] - c[tuple(i0)]) / k
+    return a
+
+def copa(pasta, nome, lado=128, lobos=6, cor='#46602c', semente=7,
+         luz=0.34, escurece=0.42, sombra=0.40, sombra_off=0.09, sombra_borrao=6,
+         borda=2.2):
+    """
+    Uma copa de arvore em PNG com fundo transparente.
+
+    lobos    quantos circulos se somam para formar a silhueta; 1 daria o disco
+    luz      quanto o lado de cima-esquerda clareia
+    escurece quanto a borda escurece em relacao ao miolo (e o que da volume)
+    sombra   a sombra projetada, ASSADA no proprio PNG — sai mais barato que uma
+             segunda camada de marcador e cai sempre do mesmo lado
+    """
+    params = dict(lado=lado, lobos=lobos, cor=cor, semente=semente, luz=luz,
+                  escurece=escurece, sombra=sombra, sombra_off=sombra_off,
+                  sombra_borrao=sombra_borrao, borda=borda)
+
+    def pinta():
+        rng = np.random.default_rng(semente)
+        y, x = np.mgrid[0:lado, 0:lado].astype(np.float32)
+        cx = cy = lado * 0.5
+        R = lado * 0.30
+        # o campo: distancia ate o lobo mais proximo, negativa dentro
+        campo = np.full((lado, lado), 1e9, np.float32)
+        for i in range(lobos):
+            ang = 2 * np.pi * i / lobos + rng.uniform(-0.4, 0.4)
+            raio = R * rng.uniform(0.18, 0.46)
+            lr = R * rng.uniform(0.58, 0.86)
+            lx, ly = cx + np.cos(ang) * raio, cy + np.sin(ang) * raio
+            campo = np.minimum(campo, np.sqrt((x - lx) ** 2 + (y - ly) ** 2) - lr)
+
+        alfa = np.clip((-campo + borda * 0.5) / borda, 0, 1)
+        fundura = np.clip(-campo / (R * 0.55), 0, 1)          # 0 na borda, 1 no miolo
+        # a luz vem de cima e da esquerda
+        ul = np.clip(0.5 - ((x - cx) + (y - cy)) / (R * 2.4), 0, 1)
+        k = (1.0 - escurece * (1.0 - fundura)) * (1.0 - luz * 0.5 + luz * ul)
+
+        base = QColor(cor)
+        rgb = np.empty((lado, lado, 3), np.float32)
+        for c, v in enumerate((base.red(), base.green(), base.blue())):
+            rgb[..., c] = np.clip(v * k, 0, 255)
+
+        # a sombra, assada: a mesma silhueta deslocada e borrada, por baixo
+        d = int(round(lado * sombra_off))
+        som = _borra_np(np.roll(np.roll(alfa, d, 0), d, 1), sombra_borrao) * sombra
+        som = np.clip(som - alfa, 0, 1)                       # nao escurece a copa
+
+        a_fim = np.clip(alfa + som, 0, 1)
+        # onde so ha sombra, a cor e preta; onde ha copa, e a copa
+        peso = np.divide(alfa, np.maximum(a_fim, 1e-6))[..., None]
+        cor_fim = rgb * peso
+
+        buf = np.empty((lado, lado, 4), np.uint8)             # ARGB32: B, G, R, A
+        buf[..., 0] = cor_fim[..., 2]; buf[..., 1] = cor_fim[..., 1]
+        buf[..., 2] = cor_fim[..., 0]; buf[..., 3] = np.clip(a_fim * 255, 0, 255)
+        buf = np.ascontiguousarray(buf)
+        return QImage(buf.data, lado, lado, 4 * lado, QImage.Format_ARGB32).copy()
+
+    return _guarda(pasta, nome, params, pinta)

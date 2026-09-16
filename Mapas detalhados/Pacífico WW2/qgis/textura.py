@@ -24,6 +24,7 @@
 # degrade de praia, o que for. Quase tudo aqui e de sobrepor; a agua e a excecao
 # historica, que ja estava pronta.
 import os, math, hashlib
+import numpy as np
 from qgis.PyQt.QtGui import QColor, QImage, qRgba
 
 # =========================================================== O RUIDO
@@ -279,3 +280,109 @@ def grao(pasta, nome, lado=256, base=64, oitavas=2, semente=3, forca=0.09):
     """
     return mancha(pasta, nome, lado=lado, base=base, oitavas=oitavas,
                   semente=semente, forca=forca, contraste=1.0)
+
+# ================================================= A CHAPA DO PATIO
+# O patio nao pode ser um ladrilho pequeno repetido. A medicao do problema:
+# a repeticao e copia literal (diferenca media de 0,2 a 1,5 niveis de cinza no
+# deslocamento de um periodo, contra 7,4 entre posicoes sem relacao), e o que
+# denuncia nao e a razao ladrilho/tela — e quantas vezes a MAIOR feicao de
+# dentro do ladrilho (a nodoa escura) aparece dentro de uma peca continua de
+# patio. A maior peca da base tem 9,22 km2, ou 1713 x 795 px no render de 3000.
+# A 46 mm cabem ~10 copias da nodoa ali e a grade salta aos olhos; a 90 mm sao
+# 5, e fica PIOR, porque a nodoa cresceu junto e ficou mais reconhecivel.
+#
+# Ou seja: aumentar o MESMO ladrilho nao resolve. O que resolve e um ladrilho
+# com MAIS feicoes dentro — e, no limite, um maior que a tela, que entao nao se
+# repete nenhuma vez. A 914,4 mm e 96 dpi, 1 px do ladrilho vale 1 px de tela.
+#
+# Isso nao se escreve com setPixel: 3456 x 3456 sao 11,9 milhoes de pixels, uns
+# 78 s no laco de Python contra 2,3 s em numpy, que ja vem no QGIS.
+def _valor_np(w, h, nx, ny, semente):
+    """O _valor() do arquivo, vetorizado: mesma grade periodica, mesmo hermite."""
+    g = np.random.default_rng(semente).random((ny, nx))
+    x = np.arange(w, dtype=np.float32) / w * nx
+    y = np.arange(h, dtype=np.float32) / h * ny
+    xi = np.floor(x).astype(np.int64) % nx; xf = (x - np.floor(x)).astype(np.float32)
+    yi = np.floor(y).astype(np.int64) % ny; yf = (y - np.floor(y)).astype(np.float32)
+    x1 = (xi + 1) % nx; y1 = (yi + 1) % ny
+    u = (xf*xf*(3-2*xf))[None, :]; v = (yf*yf*(3-2*yf))[:, None]
+    a = g[np.ix_(yi, xi)]; b = g[np.ix_(yi, x1)]
+    c = g[np.ix_(y1, xi)]; d = g[np.ix_(y1, x1)]
+    return ((a + (b-a)*u) * (1-v) + (c + (d-c)*u) * v).astype(np.float32)
+
+def _fbm_np(w, h, cel_px, oitavas, semente):
+    val = np.zeros((h, w), np.float32); amp = 1.0; soma = 0.0
+    for k in range(oitavas):
+        nx = max(2, int(round(w / cel_px * (2**k)))); ny = max(2, int(round(h / cel_px * (2**k))))
+        val += amp * _valor_np(w, h, nx, ny, semente + k*977); soma += amp; amp *= 0.5
+    lo, hi = np.percentile(val, 1), np.percentile(val, 99)   # a mesma normalizacao do mancha()
+    return np.clip((val/soma - lo/soma) / (((hi-lo)/soma) or 1.0), 0, 1)
+
+def _cortes(total, alvo, jitter, rng):
+    c = [0.0]
+    while c[-1] < total:
+        c.append(c[-1] + max(4.0, alvo * (1.0 + rng.uniform(-jitter, jitter))))
+    return np.array(c, np.float32)
+
+def apron(pasta, nome, lado=3456, placa=90, jitter=0.35, semente=1941, forca=0.15,
+          junta=0.55, junta_px=2.0, variacao=0.32, nodoa=0.55, nodoa_cel=620,
+          grao=0.30, grao_cel=9.0):
+    """
+    O patio inteiro numa chapa so: placas irregulares, nodoa larga que atravessa
+    varias placas, grao fino. Grande de proposito — em 914 mm de tela ela e maior
+    que o render de 3000 px, entao NAO SE REPETE NENHUMA VEZ.
+
+    Nao da para escrever isto com setPixel: 3456 x 3456 sao 11,9 milhoes de
+    pixels, ~78 s no laco de Python contra 2,3 s em numpy (medido). Dai o numpy,
+    que ja vem no QGIS.
+
+    placa       lado medio da placa em px do ladrilho (= px de tela)
+    jitter      o quanto o corte varia de placa para placa
+    nodoa_cel   tamanho da nodoa, em px: 620 px atravessa ~7 placas
+    """
+    params = dict(lado=lado, placa=placa, jitter=jitter, semente=semente, forca=forca,
+                  junta=junta, junta_px=junta_px, variacao=variacao, nodoa=nodoa,
+                  nodoa_cel=nodoa_cel, grao=grao, grao_cel=grao_cel)
+
+    def pinta():
+        rng = np.random.default_rng(semente)
+        w = h = lado
+        ys = _cortes(h, placa, jitter, rng)
+        yy = np.arange(h, dtype=np.float32); xx = np.arange(w, dtype=np.float32)
+        faixa = np.clip(np.searchsorted(ys, yy, side='right') - 1, 0, len(ys) - 2)
+        t = np.full((h, w), 0.5, np.float32); na_junta = np.zeros((h, w), bool)
+        for i in range(len(ys) - 1):
+            lin = np.where(faixa == i)[0]
+            if not len(lin): continue
+            xs = _cortes(w, placa * (1.0 + rng.uniform(-0.25, 0.25)), jitter, rng)
+            xs -= rng.uniform(0, placa)                      # desalinho por faixa
+            col = np.clip(np.searchsorted(xs, xx, side='right') - 1, 0, len(xs) - 2)
+            tom = 0.5 + (rng.random(len(xs) - 1) - 0.5) * variacao
+            t[lin, :] = tom[col][None, :]
+            na_junta[lin, :] = ((np.abs(xx - xs[col]) < junta_px)[None, :] |
+                                (np.abs(yy[lin] - ys[i]) < junta_px)[:, None])
+        if nodoa > 0:
+            t += (_fbm_np(w, h, nodoa_cel, 4, semente + 31) - 0.5) * nodoa
+        if grao > 0:
+            t += (_valor_np(w, h, max(2, int(w/grao_cel)), max(2, int(h/grao_cel)),
+                            semente + 7717) - 0.5) * grao
+        t = np.clip(np.where(na_junta, t - junta, t), 0, 1)
+
+        # o mesmo criterio do _sobrepor(): escurece abaixo de 0.5, clareia acima,
+        # e o lado claro pesa CLARO
+        d = (t - 0.5) * 2.0
+        alfa = np.where(d > 0, np.clip(d * forca * CLARO * 255.0, 0, 255),
+                               np.clip(-d * forca * 255.0, 0, 255)).astype(np.uint8)
+        tom = np.where(d > 0, 255, 0).astype(np.uint8)
+        buf = np.empty((h, w, 4), np.uint8)          # ARGB32 little-endian: B,G,R,A
+        buf[..., 0] = tom; buf[..., 1] = tom; buf[..., 2] = tom; buf[..., 3] = alfa
+        buf = np.ascontiguousarray(buf)
+        return QImage(buf.data, w, h, 4*w, QImage.Format_ARGB32).copy()
+
+    return _guarda(pasta, nome, params, pinta)
+
+# A escala em que 1 px do ladrilho vale 1 px de tela, a 96 dpi. Se o LARG do
+# pearl.py subir acima de LADO_PATIO, a chapa volta a se repetir — os dois
+# numeros andam juntos.
+LADO_PATIO = 3456
+ESC_PATIO  = LADO_PATIO * 25.4 / 96.0        # 914,4 mm

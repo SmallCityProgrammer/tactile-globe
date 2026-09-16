@@ -100,7 +100,9 @@ pred3857 = corre('native:reprojectlayer', {'INPUT': predios, 'TARGET_CRS': MERC}
 caixas = corre('native:orientedminimumboundingbox', {'INPUT': pred3857})
 telha = mem('predio', 'Polygon')
 telha.dataProvider().addAttributes([QgsField('rumo', QVariant.Double),
-                                    QgsField('alonga', QVariant.Double)])
+                                    QgsField('alonga', QVariant.Double),
+                                    QgsField('comp', QVariant.Double),
+                                    QgsField('larg', QVariant.Double)])
 telha.updateFields()
 lote = []
 for orig, cx in zip(pred3857.getFeatures(), caixas.getFeatures()):
@@ -109,7 +111,8 @@ for orig, cx in zip(pred3857.getFeatures(), caixas.getFeatures()):
     larg, alt = float(cx['width']), float(cx['height'])
     # 'height' e sempre o lado longo, e 'angle' e o azimute dele, horario a partir
     # do norte, em (0, 180] — nunca 0.
-    ft.setAttributes([float(cx['angle']), (alt / larg) if larg else 1.0])
+    # comp e larg alimentam o telhado em SVG: sao a largura e a altura do marcador
+    ft.setAttributes([float(cx['angle']), (alt / larg) if larg else 1.0, alt, larg])
     lote.append(ft)
 telha.dataProvider().addFeatures(lote)
 telha.updateExtents()
@@ -216,7 +219,7 @@ if aero:  veste(aero, *campo(HERE))
 if pier:  veste(pier, *cais(HERE))
 if agua_int: veste(agua_int, simples(RASO))
 if via:   via_dupla(via)
-telhados(predios, hachura=True)
+telhados(predios, HERE)
 if navios is not None: veste(navios, simples('#43433f', '#1b1b1a', 0.3))
 
 # A granulacao de papel e uma camada como outra qualquer: o retangulo do mar

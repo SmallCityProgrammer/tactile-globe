@@ -141,8 +141,55 @@ Para trocar, mude `MAR_ESTILO` no topo do `estilo.py`.
 | base | concreto | `laje` |
 | aero | terra batida escura | `rocada` |
 | pier | concreto | `laje` miúda |
-| predio | cor sorteada por prédio + nervura alinhada ao prédio | sombra dura no conjunto |
+| predio | cor sorteada por prédio + telhado em SVG | sombra dura no conjunto |
 | papel | — | `grao` sobre o mapa inteiro |
+
+### O pátio é uma chapa só, não um ladrilho
+
+O concreto **não se repete nenhuma vez**: são 3456 px a 914,4 mm, que a 96 dpi é
+maior que o render de 3000 px.
+
+Chegar nisso exigiu medir, porque a intuição errava. A repetição é cópia
+literal — diferença média de 0,2 a 1,5 níveis de cinza no deslocamento de um
+período, contra 7,4 entre posições sem relação. Mas **o que denuncia não é a
+razão ladrilho/tela**: é quantas vezes a maior feição de dentro do ladrilho (a
+nódoa escura) aparece dentro de uma peça contínua de pátio. A maior peça da base
+tem 9,22 km², ou 1713 × 795 px no render. A 46 mm cabem ~10 cópias e a grade
+salta aos olhos; a 90 mm são 5, e fica **pior**, porque a nódoa cresceu junto e
+ficou mais reconhecível.
+
+Então aumentar o mesmo ladrilho não resolve. Resolve um ladrilho com **mais
+coisa dentro** — e, no limite, um maior que a tela. Custa +0,013 s no render.
+
+Empilhar dois ladrilhos de tamanhos primos entre si também não resolve: o olho
+trava na feição do menor, que continua lá no mesmo passo. O que engana é escala
+de feição diferente, e é por isso que vai uma `mancha(base=3)` a 290 mm por cima.
+
+> Se o `LARG` do `pearl.py` subir acima de `LADO_PATIO`, a chapa volta a se
+> repetir. Os dois números andam juntos.
+
+A camada raster com `QgsMapClippingRegion` também funciona e recorta direito —
+isso foi verificado —, mas custa 7× mais, o `.qgz` não guarda a região de
+recorte, e sobretudo põe a textura em **metros**: ela cresceria ao aproximar e o
+pátio deixaria de combinar com a água, a grama e o papel, que estão todos em
+milímetros.
+
+### O telhado em SVG, em duas rotas
+
+Não é uma ou outra: são as duas, separadas por escala num `QgsRuleBasedRenderer`.
+
+O **marcador** desenha um telhado de verdade por prédio — cumeeira, duas águas,
+beiral com sombra — com `Width` e `Height` definidos por feição
+**separadamente**, que é o que deixa o galpão 4×1 ser 4×1. Mas ele cobra pelos
+prédios **que estão na tela**, não pelo tamanho da camada: 4 s a mais nos 5533 do
+mapa inteiro, e praticamente nada em Ford Island (548 na tela) ou no hangar (27).
+E no mapa inteiro o prédio tem 10 a 30 px, onde cumeeira e beiral somem de
+qualquer jeito. Pagar ali é pagar por nada.
+
+Longe, a **nervura** em `QgsSVGFillSymbolLayer`, que é até mais barata que a
+hachura de linha que havia antes (0,109 s contra 0,231 s). O que ela nunca vai
+dar é UMA cumeeira no meio e UM beiral na borda — ladrilho se repete, e cumeeira
+é singular. Essa é a fronteira entre as duas rotas, e não é de desempenho.
 
 O **raso** funciona porque a água leva a terra como furos: o shapeburst mede a
 distância até a borda mais próxima, que dentro da baía é a linha de costa. Só
@@ -224,6 +271,59 @@ exatamente em `$id % 4`, porque a constante é ≡1 módulo 4; o mapa sai listra
 
 **Nunca monte expressão com `%` do Python** — o `%` é o operador módulo do QGIS e
 a formatação come o operador. Use `.format()`.
+
+### SVG
+
+**Os dois ângulos têm sinais opostos.** `QgsSvgMarkerSymbolLayer.Angle` e
+`QgsSVGFillSymbolLayer.Angle` querem `"rumo" - 90`; o
+`QgsLinePatternFillSymbolLayer.LineAngle` quer `90 - "rumo"`. Com o sinal trocado
+o erro bate 90° certinhos e a nervura corre **atravessada** no prédio — erro que
+só aparece olhando o mapa.
+
+**Tudo que é fino tem que ser horizontal no desenho.** O QGIS estica o SVG em x e
+em y por fatores diferentes; um traço vertical vira barra gorda, um círculo vira
+elipse. Retângulo deitado guarda a espessura, que é medida em y. Se precisar de
+um traço de verdade, `vector-effect="non-scaling-stroke"` é respeitado pelo Qt.
+
+**`setClipPoints(True)` não é enfeite**: sem ele o retângulo do telhado vaza 30%
+da área de prédio por cima do vizinho e do chão. E `setPointOnSurface(True)`,
+porque o centroide de um L cai fora do L. Os padrões de fábrica do
+`QgsCentroidFillSymbolLayer` erram dois dos quatro.
+
+**`Property.File` no marcador é um no-op silencioso** — quem troca o arquivo por
+feição é `Property.Name`. (No `QgsSVGFillSymbolLayer`, `File` é a certa.)
+
+**String crua de SVG não funciona**: o QGIS acha que é URL e desenha a nuvenzinha
+de download. Caminho inexistente desenha um `?` — e string vazia também, ao
+contrário do preenchimento raster, onde a string vazia é o sentinela seguro.
+
+**`fixedAspectRatio=0` não é "travado"**: 0 quer dizer "use a proporção do
+viewBox". `Width` e `Height` por feição passam por cima dele de qualquer jeito.
+
+**A folga do telhado fica em 1,03–1,08.** Acima de ~1,10 a faixa do beiral é
+empurrada para fora do recorte e o telhado volta a parecer chapado. O que não é
+coberto não é buraco: é o chapado de baixo, na mesma cor sorteada.
+
+**Na `Rule` não existe `setScaleMinDenom`** — é `setMinimumScale` /
+`setMaximumScale`, e os nomes são ao contrário do que parecem, porque o número é
+o denominador: `minimumScale` é o limite mais **afastado**.
+
+### 2.5D e 3D, pesquisados e não aplicados
+
+`Qgs25DRenderer` **existe** e roda headless, com parede clara/escura por azimute.
+Mas custa 14,8 s nos 5533 prédios (0,98 s desligando a sombra dele, que não é
+sombra projetada e sim um brilho simétrico em unidades de mapa), e **substitui o
+renderizador inteiro** — a cor sorteada por telhado e a nervura desaparecem.
+
+`QgsVectorLayer3DRenderer` / `QgsPolygon3DSymbol` **não servem aqui**: montam,
+mas `QgsOffscreen3DEngine` e `Qgs3DUtils` não existem nas bindings Python desta
+instalação, então não há como sair PNG headless. Esse caminho está fechado.
+
+A rota que funcionaria, se um dia se quiser volume, é montar a extrusão à mão com
+`QgsGeometryGeneratorSymbolLayer` (parede com `extrude(segments_to_lines(...))`,
+telhado com `translate(...)`), que mede 2,83 s e **mantém** a cor por prédio, a
+nervura e a sombra no renderizador. Fica registrado, não aplicado — extrusão
+briga com a leitura de planta que o mapa tem hoje.
 
 ---
 

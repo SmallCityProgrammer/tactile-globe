@@ -22,7 +22,9 @@ from qgis.core import (Qgis, QgsFillSymbol, QgsLineSymbol, QgsMarkerSymbol, QgsS
                        QgsLinePatternFillSymbolLayer, QgsPointPatternFillSymbolLayer,
                        QgsRasterFillSymbolLayer, QgsShapeburstFillSymbolLayer,
                        QgsDropShadowEffect, QgsEffectStack, QgsDrawSourceEffect,
-                       QgsProperty, QgsExpression, QgsSymbolLayer, QgsUnitTypes)
+                       QgsProperty, QgsExpression, QgsSymbolLayer, QgsUnitTypes,
+                       QgsSvgMarkerSymbolLayer, QgsSVGFillSymbolLayer,
+                       QgsCentroidFillSymbolLayer, QgsRuleBasedRenderer)
 from qgis.PyQt.QtCore import QPointF
 from qgis.PyQt.QtGui import QColor
 import textura as T
@@ -242,8 +244,24 @@ def terreno(pasta):
     return [praia, sb, grama]
 
 def patio(pasta):
-    """O concreto do patio: placas com junta, cada uma com o seu tom."""
-    return [simples(BASE), sobre(T.laje(pasta, 'laje'), ESC_LAJE)]
+    """
+    O concreto do patio, numa CHAPA SO.
+
+    Nao e ladrilho repetido: a chapa tem 3456 px a 914,4 mm, que a 96 dpi e
+    maior que o render de 3000 px — entao nao se repete nenhuma vez. Foi medido
+    que aumentar o ladrilho pequeno nao resolvia: as feicoes de dentro crescem
+    junto, e a 90 mm a nodoa escura ficava ate mais reconhecivel do que a 46 mm.
+    O que resolve e um ladrilho com MAIS coisa dentro.
+
+    Por cima vai ainda uma nodoa bem larga, de FREQUENCIA diferente. Empilhar
+    dois ladrilhos de tamanhos primos entre si nao adianta — o olho trava na
+    feicao do menor, que continua la no mesmo passo. O que engana e escala de
+    feicao diferente, nao periodo diferente.
+    """
+    return [simples(BASE),
+            sobre(T.apron(pasta, 'patio'), T.ESC_PATIO),
+            sobre(T.mancha(pasta, 'nodoa', base=3, oitavas=4, contraste=0.9,
+                           forca=0.16, semente=8812), 290.0)]
 
 def campo(pasta):
     """O campo de pouso: o xadrez de quem cortou a grama em faixas."""
@@ -300,29 +318,147 @@ def papel(pasta):
     """A granulacao que passa por cima do mapa inteiro e amarra as camadas."""
     return [sobre(T.grao(pasta, 'papel', forca=0.07), ESC_PAPEL)]
 
-def telhados(layer, hachura=False):
-    """
-    Os predios: cor propria por telhado e sombra dura por baixo do conjunto.
+# ============================================================== OS TELHADOS
+#
+# O telhado e desenhado em SVG, e ha DUAS rotas — nao porque nao se soubesse
+# escolher, mas porque a medicao manda usar as duas.
+#
+# O marcador desenha um telhado de verdade por predio: cumeeira, duas aguas,
+# beiral com sombra. So que ele cobra pelos predios QUE ESTAO NA TELA, e nao
+# pelo tamanho da camada. Nos 5533 do mapa inteiro sao 4 s a mais; em
+# ford-island, com 548 na tela, mediu 2,54 s contra 2,64 s da nervura; no
+# hangar, com 27, ficou igual. E no mapa inteiro o predio tem 10 a 30 px, onde
+# cumeeira e beiral somem de qualquer jeito. Entao pagar 4 s ali e pagar por nada.
+#
+# Longe, a nervura em ladrilho SVG, que e ate mais barata que a hachura de linha
+# que havia antes (0,109 s contra 0,231 s). O que ela nunca vai dar e UMA
+# cumeeira no meio e UM beiral na borda: ladrilho se repete, e cumeeira e
+# singular. Essa e a fronteira entre as duas, e nao e de desempenho.
+CORTE_TELHADO = 8000        # denominador de escala; acima disso, so a nervura
 
-    A cor sai de rand() semeado no id da feicao. E a sombra que da o volume —
-    sem ela os predios sao manchas coladas no chao.
+# REGRA DO DESENHO: tudo que e fino tem que ser HORIZONTAL. O QGIS estica o SVG
+# em x e em y por fatores diferentes — um galpao 4x mais longo estica 4x mais em
+# x — entao um traco vertical vira barra gorda e um circulo vira elipse. Um
+# retangulo deitado guarda a espessura, que e medida em y. Se precisar de um
+# traco de verdade, vector-effect="non-scaling-stroke" e respeitado pelo Qt.
+TELHADO_SVG = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="100" viewBox="0 0 240 100">
+  <rect x="0" y="0" width="240" height="100" fill="param(fill) #5b6154"/>
+  <rect x="0" y="0"  width="240" height="49" fill="#ffffff" fill-opacity="0.10"/>
+  <rect x="0" y="51" width="240" height="49" fill="#000000" fill-opacity="0.14"/>
+  <polygon points="0,0 26,50 0,100"      fill="#000000" fill-opacity="0.10"/>
+  <polygon points="240,0 214,50 240,100" fill="#000000" fill-opacity="0.10"/>
+  <rect x="0" y="48.5" width="240" height="3" fill="param(outline) #23271f" fill-opacity="0.50"/>
+  <rect x="0" y="0"  width="240" height="3" fill="#ffffff" fill-opacity="0.22"/>
+  <rect x="0" y="93" width="240" height="7" fill="#000000" fill-opacity="0.30"/>
+</svg>
+'''
 
-    'hachura' liga a nervura do telhado, alinhada ao proprio predio; so funciona
-    se a camada tiver o campo 'rumo' (veja telhado.py).
+NERVURA_SVG = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <rect x="0" y="0"  width="24" height="3"   fill="param(outline) #000000" fill-opacity="0.34"/>
+  <rect x="0" y="12" width="24" height="1.5" fill="param(outline) #000000" fill-opacity="0.16"/>
+</svg>
+'''
+
+# O ANGULO. 'rumo' e o azimute do eixo longo, horario a partir do norte. O angulo
+# do marcador e do preenchimento SVG e o rumo do TOPO do desenho (-y), tambem
+# horario; o eixo longo do desenho e +x, que esta 90 graus adiante do topo. Dai
+# o -90. CUIDADO: o QgsLinePatternFillSymbolLayer usa a convencao CONTRARIA e
+# quer 90 - "rumo". Com o sinal trocado o erro bate 90 graus certinhos e a
+# nervura corre ATRAVESSADA no predio — erro que so aparece olhando o mapa.
+ANGULO_SVG = '"rumo" - 90'
+
+def grava_svg(pasta, nome, texto):
     """
-    fundo = simples(TELHADOS[0])
-    dd(fundo, QgsSymbolLayer.Property.FillColor,
-       "array_get(array('{p}'), {s})".format(p="','".join(TELHADOS), s=sorteia(len(TELHADOS))))
-    camadas = [fundo]
-    if hachura:
-        h = QgsLinePatternFillSymbolLayer()
-        h.setColor(QColor(0, 0, 0, 78)); h.setLineWidth(0.30); h.setDistance(0.85)
-        _mm(h, 'setDistanceUnit', 'setLineWidthUnit')
-        # 'rumo' e o azimute do eixo longo, horario a partir do norte; o angulo da
-        # trama do QGIS conta de outro jeito, dai o 90 -.
-        dd(h, QgsSymbolLayer.Property.LineAngle, '90 - "rumo"')
-        camadas.append(h)
-    return veste(layer, *camadas, efeito=sombra(1.15, 0.5, SOMBRA_SEC, 0.6, 135))
+    O SVG tem que ser um ARQUIVO. String crua nao serve: o QGIS acha que e uma
+    URL e desenha a nuvenzinha de download. Caminho inexistente desenha um '?' —
+    e a string vazia tambem, ao contrario do preenchimento raster, onde a string
+    vazia e justamente o sentinela seguro.
+    """
+    destino = os.path.join(pasta, 'svg')
+    os.makedirs(destino, exist_ok=True)
+    caminho = os.path.join(destino, nome + '.svg')
+    if not os.path.exists(caminho) or open(caminho, encoding='utf-8').read() != texto:
+        with open(caminho, 'w', encoding='utf-8') as f: f.write(texto)
+    return caminho
+
+def _cor_telhado():
+    return "array_get(array('{p}'), {s})".format(p="','".join(TELHADOS),
+                                                 s=sorteia(len(TELHADOS)))
+
+def _marcador(caminho_svg, cor, folga=1.05):
+    """
+    Um telhado desenhado por predio, medido em unidades de MAPA.
+
+    Width e Height sao data-defined SEPARADOS, e e isso que deixa o galpao 4x1
+    ser 4x1 e o galpaozinho ser quadrado. fixedAspectRatio fica em 0, que nao
+    trava nada: 0 quer dizer "use a proporcao do proprio viewBox", e Width e
+    Height passam por cima dele de qualquer jeito.
+
+    setClipPoints e obrigatorio — sem ele o retangulo do telhado vaza 30% da
+    area de predio por cima do vizinho e do chao. E a folga fica baixa: acima de
+    ~1,10 a faixa do beiral e empurrada para fora do recorte e o telhado volta a
+    parecer chapado. O que nao e coberto nao e buraco, e o chapado de baixo na
+    mesma cor sorteada.
+    """
+    m = QgsSvgMarkerSymbolLayer(caminho_svg)
+    m.setSizeUnit(QgsUnitTypes.RenderMapUnits); m.setSize(30); m.setStrokeWidth(0)
+    P = QgsSymbolLayer.Property
+    dd(m, P.Width,  '"comp" * {0:g}'.format(folga))
+    dd(m, P.Height, '"larg" * {0:g}'.format(folga))
+    dd(m, P.Angle,  ANGULO_SVG)
+    dd(m, P.FillColor, cor)                  # entra no param(fill) do SVG
+    ms = QgsMarkerSymbol(); ms.deleteSymbolLayer(0); ms.appendSymbolLayer(m)
+    cf = QgsCentroidFillSymbolLayer(); cf.setSubSymbol(ms)
+    cf.setPointOnSurface(True)               # o centroide de um L cai FORA do L
+    cf.setPointOnAllParts(False)             # de fabrica e True: um telhado por parte
+    cf.setClipPoints(True)
+    return cf
+
+def _nervura(caminho_svg, larg_mm=1.1):
+    sl = QgsSVGFillSymbolLayer(caminho_svg)
+    sl.setPatternWidth(larg_mm); _mm(sl, 'setPatternWidthUnit')
+    dd(sl, QgsSymbolLayer.Property.Angle, ANGULO_SVG)
+    return sl
+
+def telhados(layer, pasta, corte=CORTE_TELHADO):
+    """
+    Os predios: telhado desenhado de perto, nervura de longe, cor propria por
+    predio nos dois casos, e a sombra dura no RENDERIZADOR.
+
+    Precisa dos campos 'rumo', 'comp' e 'larg', que o pearl.py grava a partir da
+    caixa minima orientada.
+    """
+    cor = _cor_telhado()
+    svg_t = grava_svg(pasta, 'telhado', TELHADO_SVG)
+    svg_n = grava_svg(pasta, 'nervura', NERVURA_SVG)
+
+    def monta(*camadas):
+        s = QgsFillSymbol(); s.deleteSymbolLayer(0)
+        chapado = simples(TELHADOS[0])
+        dd(chapado, QgsSymbolLayer.Property.FillColor, cor)
+        s.appendSymbolLayer(chapado)
+        for c in camadas: s.appendSymbolLayer(c)
+        return s
+
+    # Os nomes sao ao contrario do que parecem: 'minimumScale' e o limite mais
+    # AFASTADO da regra e 'maximumScale' o mais aproximado, porque o numero e o
+    # denominador da escala. Zero quer dizer sem limite daquele lado. E nao e
+    # setScaleMinDenom: esse nao existe na Rule do 3.44.
+    raiz = QgsRuleBasedRenderer.Rule(None)
+    for sim, aproximado, afastado, nome in (
+            (monta(_marcador(svg_t, cor)), 0, corte, 'perto'),
+            (monta(_nervura(svg_n)), corte, 0, 'longe')):
+        r = QgsRuleBasedRenderer.Rule(sim)
+        r.setLabel(nome)
+        r.setMaximumScale(aproximado); r.setMinimumScale(afastado)
+        raiz.appendChild(r)
+
+    rend = QgsRuleBasedRenderer(raiz)
+    rend.setPaintEffect(sombra(1.15, 0.5, SOMBRA_SEC, 0.6, 135))
+    layer.setRenderer(rend)
+    return layer
 
 # A espessura da via sai da classe do OSM, que o convert.mjs guarda no campo 'c':
 # 1 grandes, 2 arteriais, 3 locais, 4 servico e trilha. Sem isso os 5194 caminhos

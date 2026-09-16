@@ -94,6 +94,7 @@ pred3857 = para3857(predios)
 caixas = corre('native:orientedminimumboundingbox', {'INPUT': pred3857})
 telha = mem('predio', 'Polygon')
 telha.dataProvider().addAttributes([QgsField('rumo', QVariant.Double),
+                                    QgsField('alonga', QVariant.Double),
                                     QgsField('comp', QVariant.Double),
                                     QgsField('larg', QVariant.Double)])
 telha.updateFields()
@@ -101,7 +102,8 @@ lote = []
 for orig, cx in zip(pred3857.getFeatures(), caixas.getFeatures()):
     ft = QgsFeature(telha.fields()); ft.setGeometry(orig.geometry())
     larg, alt = float(cx['width']), float(cx['height'])   # 'height' e sempre o lado longo
-    ft.setAttributes([float(cx['angle']), alt, larg])
+    # alonga decide QUAL telhado a feicao recebe, e nao so o tamanho dele
+    ft.setAttributes([float(cx['angle']), (alt / larg) if larg else 1.0, alt, larg])
     lote.append(ft)
 telha.dataProvider().addFeatures(lote); telha.updateExtents()
 print('predios com rumo:', telha.featureCount())

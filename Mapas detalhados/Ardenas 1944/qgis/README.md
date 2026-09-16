@@ -69,3 +69,41 @@ Tudo o mais — texturas de sobrepor, telhado em SVG por escala, exportação em
 camadas para o After Effects, acabamento — funciona igual e está documentado no
 **[README do Pacífico WW2](../../Pacífico%20WW2/qgis/README.md)**, que é onde as
 armadilhas de PyQGIS estão catalogadas.
+
+---
+
+## A biblioteca de telhados
+
+A ideia não foi minha, e eu tinha argumentado contra. Meu raciocínio era: sprite
+tem proporção fixa, prédio do OSM tem forma arbitrária, logo deformaria. **O
+argumento só vale se a saída for esticar UM sprite para caber em tudo.** Se em
+vez disso se *escolhe* qual sprite, deixa de ser deformação e vira
+classificação — e aí funciona.
+
+Uma casa de aldeia, um celeiro comprido, um galpão industrial e um anexo de fundo
+de quintal são coisas diferentes vistas de cima, e o OSM já diz qual é qual,
+indiretamente: pelo tamanho e pelo alongamento da caixa mínima orientada.
+
+| telhado | quando | prédios |
+|---|---|---|
+| `anexo` | `larg < 7` ou área `< 70` m² | 375 — 5,6% |
+| `celeiro` | `alonga > 3` e `comp > 26` m | 232 — 3,5% |
+| `galpao` | área `> 1100` m² | 434 — 6,5% |
+| `bloco` | `comp > 26` e `alonga < 1,7` | 506 — 7,6% |
+| `casa` | o resto | 5134 — 76,8% |
+
+Medido nos 6681 prédios, sem nulo e sem erro de avaliação. Contar importa: o
+`CASE` podia estar caindo todo no `ELSE` e o mapa pareceria certo do mesmo jeito.
+
+**A ordem dos ramos importa.** O `CASE` para no primeiro verdadeiro, e o anexo
+tem que ser testado antes do celeiro — senão um galinheiro comprido e estreito
+viraria um celeiro de quarenta metros.
+
+**Cada um tem o seu `viewBox`.** `Width` e `Height` vão definidos por feição e
+separados, então o SVG é esticado para exatamente `comp × larg` seja qual for o
+viewBox; o viewBox decide **quanto** estica. Um celeiro 4:1 desenhado num quadro
+4:1 chega esticado de ~1. É esse o ganho de escolher por classe.
+
+**O que torna isso possível é `Property.Name`**, e não `Property.File` — este
+existe, aparece na lista como *Symbol file path*, e é um no-op silencioso. Foi
+medido no mapa irmão, não lido na documentação.

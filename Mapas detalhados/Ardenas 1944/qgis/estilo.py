@@ -295,10 +295,18 @@ def grava_svg(pasta, nome, texto):
         with open(caminho, 'w', encoding='utf-8') as f: f.write(texto)
     return caminho
 
-def _marcador(caminho_svg, cor, folga=1.05):
-    """Width e Height por feicao, SEPARADOS: e o que deixa um celeiro 4x1 ser 4x1.
+def _marcador(caminho_svg, cor, folga=1.05, escolha=None):
+    """
+    Width e Height por feicao, SEPARADOS: e o que deixa um celeiro 4x1 ser 4x1.
+
+    'escolha' e uma expressao que devolve o CAMINHO do SVG, e e ela que faz a
+    biblioteca funcionar: cada predio recebe o telhado da sua classe em vez de um
+    telhado so esticado para todas as formas. Tem que ir em Property.Name —
+    Property.File existe, aparece como "Symbol file path", e e um no-op silencioso.
+
     setClipPoints e obrigatorio, senao o retangulo do telhado vaza por cima do
-    vizinho; e pointOnSurface, porque o centroide de um L cai fora do L."""
+    vizinho; e pointOnSurface, porque o centroide de um L cai fora do L.
+    """
     m = QgsSvgMarkerSymbolLayer(caminho_svg)
     m.setSizeUnit(QgsUnitTypes.RenderMapUnits); m.setSize(30); m.setStrokeWidth(0)
     P = QgsSymbolLayer.Property
@@ -306,6 +314,7 @@ def _marcador(caminho_svg, cor, folga=1.05):
     dd(m, P.Height, '"larg" * {0:g}'.format(folga))
     dd(m, P.Angle,  ANGULO_SVG)
     dd(m, P.FillColor, cor)
+    if escolha: dd(m, P.Name, escolha)
     ms = QgsMarkerSymbol(); ms.deleteSymbolLayer(0); ms.appendSymbolLayer(m)
     cf = QgsCentroidFillSymbolLayer(); cf.setSubSymbol(ms)
     cf.setPointOnSurface(True); cf.setPointOnAllParts(False); cf.setClipPoints(True)
@@ -325,8 +334,11 @@ def telhados(layer, pasta, corte=CORTE_TELHADO):
     no quadro inteiro o predio tem uns poucos pixels, onde cumeeira e beiral somem
     de qualquer jeito.
     """
+    import telhado as TL
     cor = "array_get({a}, {s})".format(a=_lista(TELHADOS), s=sorteia(len(TELHADOS)))
-    svg_t = grava_svg(pasta, 'telhado', TELHADO_SVG)
+    biblio = TL.grava(pasta, grava_svg)          # casa, celeiro, galpao, anexo, bloco
+    escolha = TL.escolhe(biblio)                 # a expressao que decide qual
+    svg_t = biblio['casa']                       # o de fabrica, se a expressao falhar
     svg_n = grava_svg(pasta, 'nervura', NERVURA_SVG)
 
     def monta(*camadas):
@@ -341,7 +353,7 @@ def telhados(layer, pasta, corte=CORTE_TELHADO):
     # 'minimumScale' e o limite mais afastado. E nao existe setScaleMinDenom na Rule.
     raiz = QgsRuleBasedRenderer.Rule(None)
     for sim, aproximado, afastado, nome in (
-            (monta(_marcador(svg_t, cor)), 0, corte, 'perto'),
+            (monta(_marcador(svg_t, cor, escolha=escolha)), 0, corte, 'perto'),
             (monta(_nervura(svg_n)), corte, 0, 'longe')):
         r = QgsRuleBasedRenderer.Rule(sim)
         r.setLabel(nome); r.setMaximumScale(aproximado); r.setMinimumScale(afastado)

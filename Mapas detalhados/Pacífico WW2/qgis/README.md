@@ -353,3 +353,51 @@ foram ajustados, e a medição continuou dando exatamente o mesmo 2,8. O cache
 estava servindo o ladrilho de antes, em silêncio. Agora o conteúdo do
 `textura.py` entra na chave, ao preço de regerar tudo (~30 s) quando o arquivo
 muda.
+
+---
+
+## Levar para o After Effects
+
+```powershell
+& 'C:\Program Files\QGIS 3.44.12\bin\python-qgis-ltr.bat' exporta.py 12000 tudo
+```
+
+`exporta.py [largura] [tudo|ford|base]` escreve em `saida/<quadro>-<largura>/`:
+o mapa achatado, **uma camada por arquivo com alfa**, e um `enquadramento.txt`
+com extensão, escala e metros por pixel.
+
+Não existe integração QGIS↔After Effects; a passagem é por arquivo. Mas o ponto
+que importa é outro: no Operations Room **o mapa é estático** e só os navios e
+aviões se mexem. Então o QGIS renderiza a base uma vez e o movimento acontece no
+AE por cima — não há motivo para renderizar quadro a quadro.
+
+### O registro é conferido, não prometido
+
+No fim da exportação o script empilha as camadas de volta e compara com o
+achatado. Medido a 12000 px: **150 de 624.624 amostras diferem, desvio médio 1,0
+de 255, pior caso 1** — puro arredondamento de antialias. Empilhar os PNG no AE,
+na ordem do número, com modo normal e opacidade cheia, reproduz o achatado.
+
+Se um dia esse número subir muito, é sinal de que alguma camada ganhou um efeito
+que não sobrevive à separação — daí a verificação ficar no script.
+
+### Tamanhos medidos
+
+| largura | escala do mapa inteiro | telhado | tempo total |
+|---|---|---|---|
+| 3000 | 1:15429 | nervura | ~30 s |
+| 6000 | 1:7715 | **desenhado** | — |
+| 12000 | 1:3857 | **desenhado** | 128 s |
+| 16000 | 1:2893 | **desenhado** | 225 s |
+
+As regras de estilo reagem ao **denominador de escala**, que depende do tamanho
+de saída e não do enquadramento. O corte dos telhados está em 1:8000, então o
+mapa inteiro já cruza o limiar a 6000 px: **o cartaz em alta resolução ganha o
+desenho dos telhados de graça**, e o custo de 4 s que motivou a divisão em duas
+rotas é irrelevante num render único.
+
+16000 px foi verificado e funciona. Não empurrei mais que isso.
+
+> As camadas são renderizadas de baixo para cima e empilhadas na hora, em vez de
+> guardadas numa lista. A 12000 px cada uma ocupa uns 420 MB em ARGB, e segurar
+> as onze junto com o achatado passaria de 4 GB.

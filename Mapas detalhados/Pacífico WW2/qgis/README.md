@@ -401,3 +401,49 @@ rotas é irrelevante num render único.
 > As camadas são renderizadas de baixo para cima e empilhadas na hora, em vez de
 > guardadas numa lista. A 12000 px cada uma ocupa uns 420 MB em ARGB, e segurar
 > as onze junto com o achatado passaria de 4 GB.
+
+---
+
+## A sinuosidade, e os molhes que não ondulam
+
+`SINUOSO_ON` no topo do `pearl.py` liga a ondulação: cada contorno é densificado
+a 25 m e cada vértice deslocado por um campo de ruído suave (terra 14 m /
+célula 220 m, mata 11 m / 130 m). Custa 0,45 s uma vez; **o render não muda**.
+
+### A ordem é o ponto, não o parâmetro
+
+O mar é a diferença do retângulo pela terra, e o pátio é o apron cortado na
+terra: os dois **partilham contorno** com ela. Ondular a terra depois de montar
+os dois abriria fenda em toda a praia. Por isso a ondulação entra logo depois da
+terra e antes de tudo que dela deriva.
+
+O intervalo de densificação também não é cosmético: `densifyByDistance` parte
+cada segmento em `ceil(comprimento/intervalo)` pedaços iguais, determinístico e
+simétrico, então o mesmo segmento em duas camadas recebe exatamente os mesmos
+pontos. Com intervalos diferentes nas duas, o vazio reaparece.
+
+### Dois pesos, e basta um zerar
+
+| peso | o que segura | por quê |
+|---|---|---|
+| `congela` | 600 m junto à moldura | parte do contorno da terra **é** a borda da figura; ondular ali serrilharia o quadro |
+| `estreito` | os molhes | concreto ondulado lê como obra torta, não como desenho à mão |
+
+Os dedos compridos do estaleiro são molhes, mas no OSM entram na **linha de
+costa** — são `terra`, e ondulavam junto. Como achá-los sem etiqueta: pela
+**largura**. O núcleo é a terra encolhida de 45 m, então tudo mais estreito que
+90 m desaparece dele; um vértice na costa larga fica a ~45 m do núcleo, um
+vértice no meio de um molhe fica muito mais longe. O peso cai a zero ao longo de
+55 m, para a ondulação se apagar entrando no molhe em vez de dar degrau.
+
+Medido nos 6169 vértices da terra: `estreito` zera 2,7% (os molhes), `congela`
+zera 26,8% (a borda do quadro, que é reta de propósito), e 61,5% ondulam cheio.
+
+### As juntas do concreto
+
+As duas coisas, e não uma. Dobrar os cortes tira a régua mas a **direção média**
+das juntas continua 0/90 — sozinho não resolve o "tudo em L". Girar 12° tira o
+alinhamento com a tela mas mantém a régua. Juntas, viram concreto despejado.
+
+A chapa do pátio não é emendável, e nunca foi — mas ela é maior que a tela, então
+a emenda nunca entra no quadro.

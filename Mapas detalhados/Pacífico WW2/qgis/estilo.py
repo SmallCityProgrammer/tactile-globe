@@ -258,8 +258,16 @@ def patio(pasta):
     feicao do menor, que continua la no mesmo passo. O que engana e escala de
     feicao diferente, nao periodo diferente.
     """
-    return [simples(BASE),
-            sobre(T.apron(pasta, 'patio'), T.ESC_PATIO),
+    import sinuoso as SN
+    chapa = sobre(SN.apron_sinuoso(pasta, 'patio', torto=11.0, torto_cel=430.0,
+                                   CLARO=T.CLARO, _guarda=T._guarda), T.ESC_PATIO)
+    # As duas coisas, e nao uma. Dobrar os cortes tira a regua, mas a DIRECAO
+    # MEDIA das juntas continua 0/90 — sozinho nao resolve o "tudo em L". Girar
+    # tira o alinhamento com a tela, mas mantem a regua. Juntas, viram concreto
+    # despejado. A chapa nao e emendavel, e nunca foi, mas isso nao importa aqui:
+    # ela e maior que a tela, entao a emenda nunca entra no quadro.
+    chapa.setAngle(12.0)
+    return [simples(BASE), chapa,
             sobre(T.mancha(pasta, 'nodoa', base=3, oitavas=4, contraste=0.9,
                            forca=0.16, semente=8812), 290.0)]
 

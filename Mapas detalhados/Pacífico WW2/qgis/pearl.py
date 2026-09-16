@@ -35,6 +35,7 @@ WGS = QgsCoordinateReferenceSystem('EPSG:4326')
 MERC = QgsCoordinateReferenceSystem('EPSG:3857')
 NAVIOS_ON = False        # os navios de 1941; ligue se quiser os marcos de volta
 MOLDURA_ON = True        # a borda branca rasgada da referencia
+SINUOSO_ON = True        # ondular costa e mata; os molhes ficam retos
 
 qgs = QgsApplication([], False); qgs.initQgis(); Processing.initialize()
 tr = QgsCoordinateTransform(WGS, MERC, QgsProject.instance())
@@ -83,6 +84,28 @@ for face in faces.getFeatures():
         ff = QgsFeature(); ff.setGeometry(g); tp.addFeature(ff)
 terra.updateExtents()
 print('faces:', faces.featureCount(), '-> terra:', terra.featureCount())
+
+# ------------------------------------------------------------ ondular a terra
+# Aqui, e nao depois. O mar e a diferenca do retangulo pela terra, e o patio e o
+# apron cortado na terra: os dois PARTILHAM contorno com ela. Ondular a terra
+# depois de montar os dois abriria fenda em toda a praia. Ondulando antes, os
+# dois sao derivados da terra ja ondulada e continuam colados.
+#
+# Dois pesos multiplicam a ondulacao, e basta um ir a zero para o vertice ficar
+# parado: 'congela' segura os 600 m junto a moldura, senao a aresta da figura
+# fica serrilhada; 'estreito' segura os molhes.
+if SINUOSO_ON:
+    import sinuoso as SN
+    _ext = tr.transformBoundingBox(QgsRectangle(W, S, E, N))
+    _faces = [f.geometry() for f in terra.getFeatures()]
+    _peso = SN.junta(SN.congela(_ext, 600.0),
+                     SN.estreito(QgsGeometry.unaryUnion(_faces), 45.0, 55.0))
+    terra = mem('terra', 'Polygon'); tp = terra.dataProvider()
+    for g in _faces:
+        ff = QgsFeature(); ff.setGeometry(SN.ondula(g, 14.0, 220.0, 1941, 2, 25.0, _peso))
+        tp.addFeature(ff)
+    terra.updateExtents()
+    print('terra ondulada')
 
 # -------------------------------------------------- o bege da area construida
 # No Operations Room o bege nao e "a terra", e o patio da base: o chao batido
@@ -210,6 +233,11 @@ if navios is not None: navios = grava(navios, 'navios')
 
 # ============================================================== VESTIR TUDO
 verde, aero, pier, via, agua_int = load('verde'), load('aero'), load('pier'), load('via'), load('agua')
+# A mata nao partilha aresta com ninguem, entao pode ondular sozinha — mas em
+# 3857, que e onde o mapa desenha; ela vem do convert.mjs em 4326.
+if SINUOSO_ON and verde:
+    verde = SN.ondula_camada(corre('native:reprojectlayer', {'INPUT': verde, 'TARGET_CRS': MERC}),
+                             11.0, 130.0, 777, 2, 25.0)
 
 veste(mar, *agua(HERE, raso_mm=7.0))
 veste(terra, *terreno(HERE), efeito=sombra(1.4, 3.4, SOMBRA, 0.45, 125))

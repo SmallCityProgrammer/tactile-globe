@@ -1,0 +1,30 @@
+{
+  "nome": "carentan",
+  "jpg": "carentan.jpg",
+  "px": [
+    4096,
+    2304
+  ],
+  "centro": [
+    -1.245,
+    49.30295
+  ],
+  "larguraKm": 3.18,
+  "alturaKm": 1.7887500000000003,
+  "metrosPorPixel": 0.7763671875,
+  "limites": {
+    "oeste": -1.2669047738629307,
+    "sul": 49.29491503769674,
+    "leste": -1.2230952261370696,
+    "norte": 49.31098365235996
+  },
+  "crs": "EPSG:3857",
+  "extensao3857": [
+    -141031.19430998884,
+    6325051.267211986,
+    -136154.33776526237,
+    6327794.499018394
+  ],
+  "fonte": "Ortofoto: BD ORTHO (r) IGN - Geoplateforme, licence ouverte Etalab 2.0",
+  "zoomTile": 18
+}

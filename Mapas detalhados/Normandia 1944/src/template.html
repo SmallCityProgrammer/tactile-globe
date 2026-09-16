@@ -80,6 +80,7 @@
 
 <script type="application/json" id="placas">__PLACAS_JSON__</script>
 <script type="application/octet-stream" id="imagens">__SPRITES_JSON__</script>
+<script type="application/json" id="malha">__MALHA_JSON__</script>
 <script>
 /* =====================================================================
    Carentan Studio — o mapa de Carentan como palco, e uma cena como dado.
@@ -123,6 +124,203 @@
 
 var PLACAS = JSON.parse(document.getElementById('placas').textContent || '[]');
 var IMG_B64 = JSON.parse(document.getElementById('imagens').textContent || '{}');
+
+/* =====================================================================
+   A RUA
+
+   Duas coisas vêm do `tools/malha.mjs`, e as duas são sobre a mesma
+   queixa: uma rota desenhada à mão passa por cima de tudo. O pelotão
+   atravessa o quarteirão em diagonal, entra num prédio e sai do outro
+   lado — e num mapa onde se lê cada telhado isso é a primeira coisa que
+   o olho pega.
+
+   A MALHA é o grafo das ruas de verdade, tirado do OSM: 3680 nós, 4025
+   arestas, 99% delas num pedaço só. Um passo de rota com `naRua: true`
+   deixa de interpolar entre dois pontos e passa a ANDAR — acha o nó mais
+   perto de cada ponto e procura o caminho mais curto por ruas. O pelotão
+   dobra a esquina porque a esquina existe, não porque alguém a desenhou.
+
+   O BLOQUEIO é um bit por célula de 3,1 m dizendo onde há prédio. Serve
+   à validação, e vale pelo mesmo motivo que "está fora do mapa": é um
+   erro que só apareceria no vídeo, quando já custou o render inteiro.
+   ===================================================================== */
+var MALHA = JSON.parse(document.getElementById('malha').textContent || 'null');
+var BLOQ = null;
+if (MALHA && MALHA.bloqueio) {
+  var bin = atob(MALHA.bloqueio.bits);
+  BLOQ = new Uint8Array(bin.length);
+  for (var bi = 0; bi < bin.length; bi++) BLOQ[bi] = bin.charCodeAt(bi);
+}
+/* metros por grau, na latitude do mapa. Não é constante no globo, mas num
+   recorte de 3 km a variação é de centésimos e a conta fica uma conta. */
+var M_LON = 72670, M_LAT = 111132;
+function metrosEntre(a, b) { return Math.hypot((a[0] - b[0]) * M_LON, (a[1] - b[1]) * M_LAT); }
+
+function bloqueado(lon, lat) {
+  if (!BLOQ) return false;
+  var B = MALHA.bloqueio, L = MALHA.limites;
+  var cx = Math.floor((lon - L.oeste) / (L.leste - L.oeste) * B.largura);
+  var cy = Math.floor((lat - L.sul) / (L.norte - L.sul) * B.altura);
+  if (cx < 0 || cy < 0 || cx >= B.largura || cy >= B.altura) return false;
+  var k = cy * B.largura + cx;
+  return !!(BLOQ[k >> 3] & (1 << (k & 7)));
+}
+
+/* O índice da malha, montado uma vez. A busca do nó mais perto é linear
+   nos 3680 nós e roda uma vez por ponto de rota, não por quadro — não
+   vale uma árvore. */
+var RUA = null;
+function malhaPronta() {
+  if (RUA || !MALHA || !MALHA.nos) return RUA;
+  var n = MALHA.nos.length / 2, viz = [];
+  for (var i = 0; i < n; i++) viz.push([]);
+  for (var e = 0; e < MALHA.arestas.length; e += 3) {
+    var a = MALHA.arestas[e], b = MALHA.arestas[e + 1], d = MALHA.arestas[e + 2];
+    viz[a].push([b, d]); viz[b].push([a, d]);
+  }
+  RUA = { n: n, viz: viz, xy: function (i) { return [MALHA.nos[i * 2], MALHA.nos[i * 2 + 1]]; } };
+  return RUA;
+}
+function noMaisPerto(lon, lat) {
+  var g = malhaPronta(); if (!g) return -1;
+  var melhor = -1, dd = Infinity;
+  for (var i = 0; i < g.n; i++) {
+    var dx = (MALHA.nos[i * 2] - lon) * M_LON, dy = (MALHA.nos[i * 2 + 1] - lat) * M_LAT;
+    var d = dx * dx + dy * dy;
+    if (d < dd) { dd = d; melhor = i; }
+  }
+  return melhor;
+}
+
+/* A* com heurística de linha reta em metros. Admissível (a reta nunca é
+   mais longa que o caminho), então o primeiro que sai é o mais curto. */
+function caminhoDeRua(deLon, deLat, paraLon, paraLat) {
+  var g = malhaPronta(); if (!g) return null;
+  var ini = noMaisPerto(deLon, deLat), fim = noMaisPerto(paraLon, paraLat);
+  if (ini < 0 || fim < 0) return null;
+  return caminhoDeNos(ini, fim);
+}
+function caminhoDeNos(ini, fim) {
+  var g = malhaPronta(); if (!g) return null;
+  if (ini === fim) return [g.xy(ini)];
+  var custo = new Float64Array(g.n).fill(Infinity);
+  var veio = new Int32Array(g.n).fill(-1);
+  var fechado = new Uint8Array(g.n);
+  var alvo = g.xy(fim);
+  var fila = [[metrosEntre(g.xy(ini), alvo), ini]];
+  custo[ini] = 0;
+  while (fila.length) {
+    /* fila por varredura: com 3680 nós o heap não paga o código que custa */
+    var melhor = 0;
+    for (var q = 1; q < fila.length; q++) if (fila[q][0] < fila[melhor][0]) melhor = q;
+    var u = fila.splice(melhor, 1)[0][1];
+    if (u === fim) break;
+    if (fechado[u]) continue;
+    fechado[u] = 1;
+    var vs = g.viz[u];
+    for (var k = 0; k < vs.length; k++) {
+      var v = vs[k][0], novo = custo[u] + vs[k][1];
+      if (novo < custo[v]) {
+        custo[v] = novo; veio[v] = u;
+        fila.push([novo + metrosEntre(g.xy(v), alvo), v]);
+      }
+    }
+  }
+  if (custo[fim] === Infinity) return null;        // dois pedaços do grafo
+  var saida = [], c = fim;
+  while (c !== -1) { saida.push(g.xy(c)); c = veio[c]; }
+  return saida.reverse();
+}
+
+/* Os pontos do passo, expandidos pela rua.
+   As pontas ficam: o primeiro e o último ponto que a cena escreveu são
+   respeitados, e só o MIOLO vira caminho de rua. Assim uma unidade pode
+   sair de dentro de um quintal, andar pela rua e parar noutro quintal —
+   forçar as pontas para o nó mais próximo teleportaria os dois extremos
+   para a esquina mais perto. */
+/* Os pontos do passo, expandidos pela rua.
+
+   A PRIMEIRA VERSÃO CONCATENAVA UM A* POR PAR de coordenadas e emendava
+   as coordenadas escritas à mão entre um e outro. Medido num caminho que
+   devia ter 250 m: saiu com 703 m, com um esporão de ida-e-volta de
+   trinta metros no meio — e um esporão é uma inversão de 180 graus no
+   rumo, que era o pião que sobrou.
+
+   A causa é a emenda. Dois A* vizinhos terminam e começam em NÓS
+   DIFERENTES (cada um busca o nó mais perto da sua ponta), e o ponto
+   escrito à mão no meio, que quase nunca cai na pista, puxa o caminho
+   para fora e o traz de volta.
+
+   Agora o caminho é feito SÓ DE NÓS DO GRAFO: cada coordenada vira um nó,
+   e os trechos entre nós consecutivos se emendam no MESMO nó, exatamente.
+   As duas pontas escritas à mão voltam no fim, para a unidade poder sair
+   de um quintal e parar noutro — mas o miolo é rua, e só rua. */
+function pontosPelaRua(r) {
+  if (r._rua) return r._rua;
+  var g = malhaPronta(), P = r.points;
+  if (!g) { r._rua = P; return P; }
+
+  var nos = [];
+  for (var i = 0; i < P.length; i++) {
+    var n = noMaisPerto(P[i][0], P[i][1]);
+    if (n >= 0 && (!nos.length || nos[nos.length - 1] !== n)) nos.push(n);
+  }
+  if (nos.length < 2) { r._rua = P; return P; }
+
+  var cam = [g.xy(nos[0])];
+  for (var k = 0; k < nos.length - 1; k++) {
+    var t = caminhoDeNos(nos[k], nos[k + 1]);
+    if (!t) continue;
+    for (var j = 1; j < t.length; j++) cam.push(t[j]);   // o 0 é o nó que já está lá
+  }
+
+  /* CORTA A RÉ DAS DUAS PONTAS.
+     O nó mais perto da partida pode estar ATRÁS dela na rua, e o mais
+     perto da chegada pode estar ADIANTE: no primeiro caso a unidade dá
+     um passo para trás antes de sair, no segundo ela passa do ponto e
+     volta. Meio segundo de marcha a ré, que com o rumo olhando dez
+     metros à frente vira meia-volta completa — e, num passo que continua
+     o anterior, vira um pião na emenda.
+
+     O teste é o produto escalar com a direção pretendida pelo autor: um
+     nó que está para trás dela é ré, e sai. */
+  function paraFrente(v, d) { return v[0] * d[0] + v[1] * d[1] >= 0; }
+  var ult = P[P.length - 1], penul = P[P.length - 2] || P[0];
+  var rumoIni = [P[1][0] - P[0][0], P[1][1] - P[0][1]];
+  var rumoFim = [ult[0] - penul[0], ult[1] - penul[1]];
+  var corte = 0, fimCorte = cam.length;
+  while (corte < cam.length - 1 && !paraFrente([cam[corte][0] - P[0][0], cam[corte][1] - P[0][1]], rumoIni)) corte++;
+  while (fimCorte > corte + 1 && paraFrente([cam[fimCorte - 1][0] - ult[0], cam[fimCorte - 1][1] - ult[1]], rumoFim)) fimCorte--;
+  /* O CORTE NÃO PODE COMER O CAMINHO INTEIRO.
+     Quando as duas pontas se encontram — e encontram, numa rota curta ou
+     numa em que o miolo faz curva para trás — a fatia sai VAZIA, e aí o
+     que resta é partida e chegada: uma reta atravessando o quarteirão, com
+     o pelotão marchando por cima dos telhados. Foi o que apareceu no fim
+     da prova. Cortar é um ajuste de ponta; se ele consome mais que um
+     terço dos nós, o palpite está errado e o caminho inteiro vale mais que
+     o ajuste. */
+  if (fimCorte - corte >= Math.max(2, cam.length * 0.67)) cam = cam.slice(corte, fimCorte);
+
+  /* TIRA OS ESPORÕES. Se o vizinho de trás e o da frente estão quase no
+     mesmo lugar, o ponto do meio é uma ida-e-volta: some com ele. Repete
+     até não sobrar nenhum, porque tirar um pode revelar o seguinte. */
+  var mexeu = true, voltas = 0;
+  while (mexeu && voltas++ < 8) {
+    mexeu = false;
+    for (var s = 1; s < cam.length - 1; s++) {
+      if (metrosEntre(cam[s - 1], cam[s + 1]) < 6) { cam.splice(s, 1); mexeu = true; s--; }
+    }
+  }
+
+  var saida = [P[0]];
+  for (var q = 0; q < cam.length; q++)
+    if (metrosEntre(cam[q], saida[saida.length - 1]) > 3) saida.push(cam[q]);
+  var fim = P[P.length - 1];
+  if (metrosEntre(fim, saida[saida.length - 1]) > 3) saida.push(fim);
+
+  r._rua = saida.length > 1 ? saida : P;
+  return r._rua;
+}
 
 /* ---------------- Mercator ---------------- */
 var R = 6378137.0, GR = Math.PI / 180;
@@ -308,7 +506,15 @@ function fazUnidade(d) {
 }
 function clonaGrupo(g) {
   return { n: Math.max(1, Math.min(60, Math.round(+g.n || 1))),
-           espalhoM: g.espalhoM > 0 ? +g.espalhoM : 18,
+           espalhoM: g.espalhoM > 0 ? +g.espalhoM : 12,
+           /* O TAMANHO DE UM HOMEM, EM METROS, E EXPLICITO.
+              Antes ele era derivado: sizeM / raiz(n), o que dava 8,6 m por
+              soldado num pelotao de 26. Sobre desenho isso passava; sobre
+              ortofoto de 20 cm/px vira um boneco do tamanho de uma casa em
+              cima de uma rua de cinco metros, e a mentira fica obvia.
+              Na referencia o soldado tem quase o tamanho de um homem — o
+              icone e maior que a pessoa, mas por pouco. */
+           homemM: g.homemM > 0 ? +g.homemM : 2.6,
            formacao: g.formacao || 'coluna',
            semente: g.semente === undefined ? 7 : +g.semente };
 }
@@ -347,6 +553,7 @@ function clonaPasso(r) {
            duration: r.duration > 0 ? +r.duration : null,
            speedKmh: r.speedKmh > 0 ? +r.speedKmh : null,
            esperar: r.esperar > 0 ? +r.esperar : null,
+           naRua: !!r.naRua, _rua: null,
            start: (r.start === undefined || r.start === null) ? null : +r.start,
            loop: !!r.loop, _cache: null };
 }
@@ -388,7 +595,8 @@ function unidadePorId(id) { for (var i = 0; i < UNIDADES.length; i++) if (UNIDAD
    freia sozinha a cada esquina. */
 function amostraRota(r) {
   if (r._cache) return r._cache;
-  var P = r.points.map(function (p) { return [mx(p[0]), my(p[1])]; });
+  var brutos = r.naRua ? pontosPelaRua(r) : r.points;
+  var P = brutos.map(function (p) { return [mx(p[0]), my(p[1])]; });
   if (P.length < 2) { r._cache = { pts: P.slice(), acc: [0], total: 0 }; return r._cache; }
   var passo = 1 / 24, pts = [];
   for (var i = 0; i < P.length - 1; i++) {
@@ -464,19 +672,50 @@ function posicaoNoTempo(u, t) {
   if (anterior) { var f = posicaoEm(anterior.p, anterior.fim, anterior.ini, anterior.fim); f.parado = true; return f; }
   return null;
 }
+/* O ponto da curva a uma distância percorrida, em unidades de mapa. */
+function pontoNaCurva(a, s) {
+  s = Math.min(Math.max(s, 0), a.total);
+  var lo = 0, hi = a.acc.length - 1;
+  while (lo < hi - 1) { var mid = (lo + hi) >> 1; if (a.acc[mid] <= s) lo = mid; else hi = mid; }
+  var seg = a.acc[hi] - a.acc[lo], f = seg > 0 ? (s - a.acc[lo]) / seg : 0;
+  return [a.pts[lo][0] + (a.pts[hi][0] - a.pts[lo][0]) * f,
+          a.pts[lo][1] + (a.pts[hi][1] - a.pts[lo][1]) * f];
+}
+
+/* QUANTO O RUMO OLHA À FRENTE, em metros de chão.
+
+   Era daqui que vinha o pião. O rumo saía de UM PAR DE AMOSTRAS VIZINHAS
+   da curva reamostrada — e essas amostras estão a uns quinze centímetros
+   uma da outra, porque a Catmull-Rom corta cada trecho em 24 pedaços e um
+   trecho de rua tem dois ou três metros. Num pedaço de quinze centímetros
+   a direção não é a direção de ninguém: é arredondamento de ponto
+   flutuante. Como o grupo inteiro é girado por esse número, o esquadrão
+   rodava no próprio eixo.
+
+   Dez metros é a distância em que um homem marchando de fato aponta: ele
+   encara para onde vai no próximo passo e meio, não para onde o pé caiu.
+   E a conta passa a ser estável, porque dez metros de curva têm direção
+   mesmo quando os últimos quinze centímetros não têm. */
+var OLHAR_M = 10.0;
+
 function posicaoEm(r, t, ini, fim) {
   var a = amostraRota(r), d = fim - ini;
   var u = d > 0 ? (t - ini) / d : 0;
   if (r.loop && d > 0) u = ((u % 1) + 1) % 1;
   u = Math.min(Math.max(u, 0), 1);
   if (a.pts.length < 2) return { x: a.pts[0] ? a.pts[0][0] : 0, y: a.pts[0] ? a.pts[0][1] : 0, h: 0 };
-  var alvo = u * a.total, lo = 0, hi = a.acc.length - 1;
-  while (lo < hi - 1) { var mid = (lo + hi) >> 1; if (a.acc[mid] <= alvo) lo = mid; else hi = mid; }
-  var seg = a.acc[hi] - a.acc[lo], f = seg > 0 ? (alvo - a.acc[lo]) / seg : 0;
-  var x = a.pts[lo][0] + (a.pts[hi][0] - a.pts[lo][0]) * f;
-  var y = a.pts[lo][1] + (a.pts[hi][1] - a.pts[lo][1]) * f;
-  var dx = a.pts[hi][0] - a.pts[lo][0], dy = a.pts[hi][1] - a.pts[lo][1];
-  return { x: x, y: y, h: Math.atan2(dx, dy) / GR };     // rumo: horário a partir do norte
+  var alvo = u * a.total;
+  var aqui = pontoNaCurva(a, alvo);
+  /* o olhar em unidades de mapa: metros de chão esticados pelo Mercator */
+  var olhar = chao(OLHAR_M, latDe(aqui[1]));
+  var s0 = alvo, s1 = alvo + olhar;
+  if (s1 > a.total) {                      // no fim da rota não há para onde
+    s1 = a.total; s0 = Math.max(0, a.total - olhar);   // olha para trás, mesma direção
+  }
+  if (s1 - s0 < 1e-6) return { x: aqui[0], y: aqui[1], h: 0 };
+  var p0 = pontoNaCurva(a, s0), p1 = pontoNaCurva(a, s1);
+  return { x: aqui[0], y: aqui[1],
+           h: Math.atan2(p1[0] - p0[0], p1[1] - p0[1]) / GR };  // rumo: horário do norte
 }
 
 /* ---------------- os tiros ----------------
@@ -609,6 +848,54 @@ function visibilidade(u, t) {
   return v;
 }
 
+/* O RUMO SAI DO TEMPO, E NÃO DA CURVA.
+
+   Tirar o rumo da tangente dentro de uma perna parecia óbvio e tem dois
+   defeitos que só aparecem em movimento. O primeiro é a escala: a
+   Catmull-Rom corta cada trecho em 24 pedaços, e num pedaço de quinze
+   centímetros a direção é arredondamento de ponto flutuante — foi daí que
+   veio o esquadrão girando no próprio eixo. O segundo é a EMENDA: o fim de
+   uma perna olha para trás (não há curva à frente) e o começo da seguinte
+   olha para frente, e no instante em que uma vira a outra o rumo pula.
+
+   Perguntar ao RELÓGIO resolve os dois de uma vez, porque o relógio não
+   sabe onde uma perna acaba: "onde esta unidade vai estar daqui a quatro
+   décimos?" atravessa a emenda sem saber que ela existe, e quatro décimos
+   de segundo são dez metros de marcha nesta compressão — distância em que
+   um homem de fato aponta.
+
+   Parado, olha para TRÁS até achar o último movimento: quem está deitado
+   na vala continua encarando para onde estava indo, e não para o norte. */
+var RUMO_DT = 0.4;              // segundos de filme para o olhar à frente
+var RUMO_VOLTAS = 8;            // quantos passos para trás antes de desistir
+
+function rumoNoTempo(u, t, aqui) {
+  var minimo = chao(1.0, latDe(aqui.y));      // menos que um metro não é direção
+  var q = posicaoNoTempo(u, t + RUMO_DT);
+  if (q) {
+    var dx = q.x - aqui.x, dy = q.y - aqui.y;
+    if (Math.hypot(dx, dy) >= minimo) return Math.atan2(dx, dy) / GR;
+  }
+  for (var k = 1; k <= RUMO_VOLTAS; k++) {
+    var r = posicaoNoTempo(u, t - k * RUMO_DT);
+    if (!r) break;
+    var ax = aqui.x - r.x, ay = aqui.y - r.y;
+    if (Math.hypot(ax, ay) >= minimo) return Math.atan2(ax, ay) / GR;
+  }
+  /* AINDA NÃO SAIU. Antes de a rota começar não há passado nenhum para
+     onde olhar, e devolver o heading da cena fazia a unidade encarar um
+     lado até o segundo do arranque e virar de supetão no primeiro quadro
+     em que anda. Quem espera para atacar já está virado para o ataque:
+     procura à frente até achar o primeiro movimento. */
+  for (var m = 2; m <= RUMO_VOLTAS * 3; m++) {
+    var f = posicaoNoTempo(u, t + m * RUMO_DT);
+    if (!f) break;
+    var bx = f.x - aqui.x, by = f.y - aqui.y;
+    if (Math.hypot(bx, by) >= minimo) return Math.atan2(bx, by) / GR;
+  }
+  return u.heading;                            // nunca anda: o que a cena disser
+}
+
 /* ---------------- o relógio ---------------- */
 function seek(t) {
   T = Math.max(0, +t || 0);
@@ -616,7 +903,7 @@ function seek(t) {
     var u = UNIDADES[i];
     var p = temRota(u) ? posicaoNoTempo(u, T) : null;
     if (p) {
-      u._l = lonDe(p.x); u._t = latDe(p.y); u._h = p.h + u.spin; u._parado = !!p.parado;
+      u._l = lonDe(p.x); u._t = latDe(p.y); u._h = rumoNoTempo(u, T, p) + u.spin; u._parado = !!p.parado;
     } else {
       u._l = u.lon; u._t = u.lat; u._h = u.heading + u.spin; u._parado = true;
     }
@@ -652,7 +939,7 @@ function desenhaTrajetos() {
       if (r.points.length < 2) continue;
       ctx.strokeStyle = cor;
       ctx.setLineDash([7 * DPR, 6 * DPR]);
-      var a = amostraRota(r);
+      var a = amostraRota(r);   // já expandido pela rua, se for o caso
       ctx.beginPath();
       for (var j = 0; j < a.pts.length; j += 2) {
         var s = paraTelaXY(a.pts[j][0], a.pts[j][1]);
@@ -727,7 +1014,7 @@ function desenhaUnidade(u, baixas) {
   var prop = im.height / im.width;
   var s = paraTela(u._l, lat);
   var g = u.grupo;
-  var largUm = chao((g ? (u.sizeM / Math.max(1.6, Math.sqrt(g.n))) : u.sizeM) * ESCALA, lat) * e;
+  var largUm = chao((g ? g.homemM : u.sizeM) * ESCALA, lat) * e;
   if (u.minPx > 0 && largUm < u.minPx * DPR) largUm = u.minPx * DPR;
   if (largUm < 1.2) largUm = 1.2;
   var alcance = largUm * 2 + (g ? chao(g.espalhoM * g.n, lat) * e : 0);
@@ -872,24 +1159,86 @@ function livra(x, y, w, h) {
   return y;
 }
 
+/* A ETIQUETA, no estilo da referencia.
+
+   A pilula de fundo claro saiu. Sobre foto aerea ela vira um adesivo
+   opaco tapando justamente o terreno que a foto foi buscar; e sobre o
+   mapa desenhado ela ja competia com o bege da cidade.
+
+   O que a referencia faz e mais simples e mais forte: VERSALETE branco
+   com contorno escuro, sem caixa, e uma HASTE fina descendo ate um ponto
+   no lugar da unidade. O contorno e o que faz o texto ler sobre telhado
+   claro e sobre sombra de arvore com a mesma facilidade — uma cor so
+   nunca consegue as duas.
+
+   O versalete e desenhado a mao: o canvas nao respeita font-variant, e
+   font-feature-settings tambem nao chega ao measureText. Primeira letra
+   de cada palavra no tamanho cheio, o resto em maiuscula a 78% — que e o
+   que o versalete e. */
+function versalete(texto) {
+  /* devolve [[trecho, escala], ...] para desenhar e medir de uma vez */
+  var saida = [], palavras = String(texto).split(/(\s+)/);
+  for (var i = 0; i < palavras.length; i++) {
+    var p = palavras[i];
+    if (!p) continue;
+    if (/^\s+$/.test(p)) { saida.push([p, 1]); continue; }
+    saida.push([p.charAt(0).toUpperCase(), 1]);
+    if (p.length > 1) saida.push([p.slice(1).toUpperCase(), 0.78]);
+  }
+  return saida;
+}
+function larguraVersalete(partes, tam) {
+  var w = 0;
+  for (var i = 0; i < partes.length; i++) {
+    ctx.font = '600 ' + (tam * partes[i][1]) + 'px Georgia, "Times New Roman", serif';
+    w += ctx.measureText(partes[i][0]).width;
+  }
+  return w;
+}
+
 function pilula(texto, sx, sy, opts) {
   opts = opts || {};
-  var tam = (opts.tam || 13) * DPR;
-  ctx.font = (opts.forte ? '600 ' : '') + tam + 'px "Segoe UI", system-ui, sans-serif';
-  var larg = ctx.measureText(texto).width, padX = 7 * DPR, padY = 4 * DPR;
-  var w = larg + padX * 2, h = tam + padY * 2;
+  var tam = (opts.tam || 13) * DPR * 1.15;
+  var partes = versalete(texto);
+  var w = larguraVersalete(partes, tam), h = tam * 1.5;
   var x = sx - (opts.centro ? w / 2 : 0), y = sy - h / 2;
   if (!opts.fixa) y = livra(x, y, w, h);
   ctx.save();
-  ctx.fillStyle = 'rgba(20,32,20,.28)';
-  arredondado(x + 1.5 * DPR, y + 1.5 * DPR, w, h, 4 * DPR); ctx.fill();
-  ctx.fillStyle = opts.fundo || 'rgba(243,239,225,.93)';
-  arredondado(x, y, w, h, 4 * DPR); ctx.fill();
-  ctx.fillStyle = opts.cor || '#2b2f24';
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  ctx.fillText(texto, x + padX, y + h / 2 + 0.5 * DPR);
+  ctx.lineJoin = 'round'; ctx.miterLimit = 2;
+  /* o contorno primeiro, grosso, e o preenchimento por cima: stroke
+     depois de fill comeria metade da espessura para dentro da letra */
+  ctx.strokeStyle = opts.contorno || 'rgba(16,18,14,.88)';
+  ctx.lineWidth = Math.max(2.2 * DPR, tam * 0.16);
+  ctx.fillStyle = opts.cor || '#ffffff';
+  var cx = x, meio = y + h / 2;
+  for (var i = 0; i < partes.length; i++) {
+    ctx.font = '600 ' + (tam * partes[i][1]) + 'px Georgia, "Times New Roman", serif';
+    ctx.strokeText(partes[i][0], cx, meio);
+    ctx.fillText(partes[i][0], cx, meio);
+    cx += ctx.measureText(partes[i][0]).width;
+  }
   ctx.restore();
-  return w;
+  return { x: x, y: y, w: w, h: h };
+}
+
+/* A HASTE: do canto de baixo da etiqueta ate o ponto da unidade, com um
+   disco no fim. E ela que diz A QUAL unidade a etiqueta pertence quando
+   o desempilhamento empurra o texto para longe — sem a haste, uma
+   etiqueta que subiu tres linhas fica apontando para o vizinho. */
+function haste(caixa, sx, sy) {
+  var px = caixa.x + caixa.w * 0.06, py = caixa.y + caixa.h;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(16,18,14,.80)'; ctx.lineWidth = 2.6 * DPR;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1.1 * DPR;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke();
+  ctx.fillStyle = 'rgba(16,18,14,.80)';
+  ctx.beginPath(); ctx.arc(sx, sy, 3.4 * DPR, 0, 6.2832); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(sx, sy, 2.2 * DPR, 0, 6.2832); ctx.fill();
+  ctx.restore();
 }
 function apareceEm(o, t) {
   var v = 1;
@@ -915,8 +1264,9 @@ function desenhaMarcos() {
     if (m.tipo === 'objetivo') {
       /* o alvo: dois anéis, e um X quando já foi tomado */
       var tomado = m.tomado !== null && m.tomado !== undefined && T >= m.tomado;
-      ctx.strokeStyle = tomado ? '#3f6f3a' : '#7c3b2a';
-      ctx.lineWidth = 2.2 * DPR;
+      ctx.strokeStyle = tomado ? 'rgba(180,255,170,.95)' : 'rgba(255,255,255,.95)';
+      ctx.lineWidth = 2.4 * DPR;
+      ctx.shadowColor = 'rgba(16,18,14,.9)'; ctx.shadowBlur = 3 * DPR;
       ctx.beginPath(); ctx.arc(s[0], s[1], 13 * DPR, 0, 6.2832); ctx.stroke();
       ctx.beginPath(); ctx.arc(s[0], s[1], 5 * DPR, 0, 6.2832); ctx.stroke();
       if (tomado) {
@@ -925,9 +1275,12 @@ function desenhaMarcos() {
         ctx.moveTo(s[0] + 9 * DPR, s[1] - 9 * DPR); ctx.lineTo(s[0] - 9 * DPR, s[1] + 9 * DPR);
         ctx.stroke();
       }
-      if (m.texto) pilula(m.texto, s[0], s[1] - 28 * DPR, { centro: true, forte: true, tam: 12 });
+      if (m.texto) {
+        var cm = pilula(m.texto, s[0], s[1] - 34 * DPR, { centro: true, tam: 12 });
+        haste(cm, s[0], s[1]);
+      }
     } else if (m.texto) {
-      pilula(m.texto, s[0], s[1], { centro: true, tam: m.tam || 12, cor: m.cor || '#4a4738' });
+      pilula(m.texto, s[0], s[1], { centro: true, tam: m.tam || 12 });
     }
     ctx.restore();
   }
@@ -947,9 +1300,13 @@ function desenhaRotulos(baixas) {
     var s = paraTela(u._l, u._t);
     if (s[0] < -240 || s[0] > CW + 240 || s[1] < -140 || s[1] > CH + 140) continue;
     var tipo = tipoPorId(u.type);
-    var cor = tipo && tipo.lado === 'eixo' ? '#6b2f22' : '#22405f';
+    /* branco dos dois lados, como na referencia; quem diz o lado e o
+       proprio sprite, nao a cor da letra. O eixo ganha so um contorno
+       mais quente, que se le sem virar legenda colorida. */
+    var cont = tipo && tipo.lado === 'eixo' ? 'rgba(52,16,10,.90)' : 'rgba(16,18,14,.88)';
     ctx.save(); ctx.globalAlpha = a;
-    pilula(u.rotulo, s[0], s[1] - 24 * DPR, { centro: true, tam: 12, forte: true, cor: cor });
+    var cx = pilula(u.rotulo, s[0], s[1] - 42 * DPR, { centro: true, tam: 13, contorno: cont });
+    haste(cx, s[0], s[1]);
     ctx.restore();
   }
 }
@@ -967,9 +1324,8 @@ function desenhaRelogio() {
   var h = Math.floor(seg / 3600) % 24, m = Math.floor(seg / 60) % 60;
   var txt = (h < 10 ? '0' : '') + h + 'h' + (m < 10 ? '0' : '') + m;
   ctx.save();
-  ctx.font = '600 ' + 20 * DPR + 'px "Segoe UI", system-ui, sans-serif';
-  var w = ctx.measureText('00h00').width + 14 * DPR;
-  pilula(txt, CW - 18 * DPR - w, 32 * DPR, { tam: 20, forte: true, fixa: true });
+  var w = larguraVersalete(versalete('00h00'), 22 * DPR * 1.15);
+  pilula(txt, CW - 26 * DPR - w, 38 * DPR, { tam: 22, fixa: true });
   ctx.restore();
 }
 
@@ -1022,7 +1378,7 @@ function objetoDaCena() {
     if (!u.on) d.on = false;
     if (u.entra !== null) d.entra = u.entra;
     if (u.sai !== null) d.sai = u.sai;
-    if (u.grupo) d.grupo = { n: u.grupo.n, espalhoM: u.grupo.espalhoM,
+    if (u.grupo) d.grupo = { n: u.grupo.n, espalhoM: u.grupo.espalhoM, homemM: u.grupo.homemM,
                              formacao: u.grupo.formacao, semente: u.grupo.semente };
     var P = pernas(u);
     if (P.length) {
@@ -1034,6 +1390,7 @@ function objetoDaCena() {
           if (r.duration) o.duration = r.duration;
           if (r.speedKmh) o.speedKmh = r.speedKmh;
           if (r.loop) o.loop = true;
+          if (r.naRua) o.naRua = true;
         }
         if (r.start !== null) o.start = r.start;
         return o;
@@ -1141,6 +1498,61 @@ function validaCena(sc) {
                                   ' s de filme x' + esc + ') — infantaria faz 4 a 6');
         else if (kmh < 0.8 && met > 30) avisos.push(quem + ': o passo ' + (g + 1) + ' sai a ' + kmh.toFixed(1) +
                                   ' km/h de verdade — mais devagar que andar, confira a duração');
+      }
+      /* O TRECHO QUE ATRAVESSA PRÉDIO.
+         Amostra o caminho de 3 em 3 metros e mede a maior corrida CONTÍNUA
+         de amostras dentro de parede. A corrida é o que separa os dois
+         casos: raspar a quina de uma casa dá uma ou duas células e é o que
+         acontece em qualquer rua estreita; atravessar a casa dá dez ou
+         vinte seguidas. Contar o total confundiria os dois. */
+      if (BLOQ && pts.length > 1) {
+        var linha = r.naRua ? pontosPelaRua(clonaPasso(r)) : pts;
+        var corrida = 0, pior = 0, ondeX = 0, ondeY = 0;
+        for (var c1 = 0; c1 < linha.length - 1; c1++) {
+          var aa = linha[c1], bb = linha[c1 + 1];
+          var comp = Math.hypot((bb[0] - aa[0]) * 72670, (bb[1] - aa[1]) * 111132);
+          var passos = Math.max(1, Math.ceil(comp / 3));
+          for (var c2 = 0; c2 <= passos; c2++) {
+            var u2 = c2 / passos;
+            var lo = aa[0] + (bb[0] - aa[0]) * u2, la = aa[1] + (bb[1] - aa[1]) * u2;
+            if (bloqueado(lo, la)) {
+              corrida += 3;
+              if (corrida > pior) { pior = corrida; ondeX = lo; ondeY = la; }
+            } else corrida = 0;
+          }
+        }
+        /* UM CAMINHO DE RUA NÃO PODE SER REPROVADO PELA MÁSCARA.
+           Ele é, por construção, o eixo de uma via que o OSM diz existir; se
+           ele encosta em parede é porque numa cidade normanda a casa dá para a
+           calçada e a célula de 3,1 m não sabe separar as duas. Reprovar aqui
+           seria a validação discutindo com o próprio dado. Fica como nota,
+           porque ainda diz onde a rua é estreita.
+
+           A reprovação vale para o traçado à MÃO, que é onde o atalho por
+           dentro do quarteirão realmente acontece. */
+        /* UM naRua QUE VIROU RETA NÃO É UM naRua.
+           Quando o A* não fecha — as duas pontas em pedaços diferentes do
+           grafo, ou o corte de ponta comendo o caminho — o passo cai de
+           volta nas coordenadas cruas, em silêncio, e vira uma reta
+           atravessando o quarteirão. Como passo de rua é só anotado e não
+           reprovado, o silêncio passava direto. Se a expansão devolveu o
+           mesmo número de pontos que entrou, não houve rua nenhuma. */
+        var virouReta = r.naRua && linha.length <= pts.length;
+        if (virouReta && pior >= 9)
+          erros.push(quem + ': o passo ' + (g + 1) + ' pede naRua mas caiu em RETA e ' +
+                     'atravessa ' + pior + ' m de prédio em ' + ondeX.toFixed(5) + ',' +
+                     ondeY.toFixed(5) + ' — as pontas podem estar longe da malha');
+        else if (pior >= 9) {
+          var onde = ' em ' + ondeX.toFixed(5) + ',' + ondeY.toFixed(5);
+          if (r.naRua)
+            avisos.push(quem + ': o passo ' + (g + 1) + ' passa rente a ' + pior +
+                        ' m de fachada' + onde + ' — é rua estreita, não atalho');
+          else if (pior >= 20)
+            erros.push(quem + ': o passo ' + (g + 1) + ' atravessa ' + pior +
+                       ' m de prédio' + onde + ' — experimente naRua: true');
+          else
+            avisos.push(quem + ': o passo ' + (g + 1) + ' raspa ' + pior + ' m de prédio' + onde);
+        }
       }
       if (pts.length) fimAnterior = pts[pts.length - 1];
       relogio += dur || 1;
@@ -1493,6 +1905,17 @@ window.__mapa = {
   validateScene: validaCena, validaCena: validaCena,
   demo: cena, demos: function () { return Object.keys(CENAS); },
   placas: function () { return PLACAS; },
+  /* para conferir uma rota no console antes de escrevê-la na cena */
+  rua: function (deLon, deLat, paraLon, paraLat) {
+    return caminhoDeRua(deLon, deLat, paraLon, paraLat);
+  },
+  bloqueado: bloqueado,
+  malha: function () {
+    var g = malhaPronta();
+    return g ? { nos: g.n, arestas: MALHA.arestas.length / 3,
+                 bloqueio: MALHA.bloqueio.largura + 'x' + MALHA.bloqueio.altura +
+                           ' a ' + MALHA.bloqueio.metrosPorCelula + ' m' } : null;
+  },
   catalogo: function () { return CATALOGO; },
   sprites: UNIDADES,
   spawn: poe,

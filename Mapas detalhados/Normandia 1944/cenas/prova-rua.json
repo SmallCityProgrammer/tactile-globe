@@ -1,0 +1,89 @@
+{
+  "_": [
+    "PROVA DE RUA — 24 s, só para olhar antes de montar os dois minutos.",
+    "",
+    "O que esta cena existe para mostrar, e nada mais:",
+    "",
+    "1. ZOOM. A câmera abre em 340 m e fecha em 190 m, que é a escala em que",
+    "   um pelotão cabe na rua em vez de ser espremido nela. Era esse o",
+    "   problema, e não o detalhe do desenho.",
+    "",
+    "2. O RUMO NÃO GIRA. O pião do esquadrão vinha de o rumo sair de um par de",
+    "   amostras vizinhas da curva, a quinze centímetros uma da outra — nessa",
+    "   escala a direção é arredondamento de ponto flutuante, e o grupo inteiro",
+    "   é girado por ela. Agora o rumo olha dez metros à frente. Este trecho",
+    "   tem duas curvas fechadas de propósito: se ainda girar, gira aqui.",
+    "",
+    "3. ANDAR NA RUA. Os dois passos são naRua, então o caminho sai do grafo",
+    "   das ruas do OSM e não de uma reta.",
+    "",
+    "4. ESCALA HUMANA. homemM 2.6 — o soldado tem tamanho de soldado sobre uma",
+    "   rua de cinco metros e meio."
+  ],
+
+  "duracao": 24,
+  "escalaDoTempo": 41,
+  "relogio": "06:20",
+  "time": 0,
+  "scale": 1,
+
+  "camera": {
+    "chaves": [
+      { "t": 0,  "lon": -1.25010, "lat": 49.30030, "larguraM": 340 },
+      { "t": 4,  "lon": -1.25010, "lat": 49.30030, "larguraM": 340 },
+      { "t": 14, "lon": -1.24900, "lat": 49.30170, "larguraM": 240 },
+      { "t": 18, "lon": -1.24900, "lat": 49.30170, "larguraM": 240 },
+      { "t": 24, "lon": -1.24830, "lat": 49.30265, "larguraM": 190 }
+    ]
+  },
+
+  "marcos": [
+    { "lon": -1.24963, "lat": 49.30085, "texto": "entroncamento em T",
+      "tipo": "objetivo", "entra": 1, "tomado": 8 }
+  ],
+
+  "sprites": [
+    {
+      "_": "O pelotão sobe a estrada de Périers, dobra no entroncamento e segue pela Rue Holgate. As duas curvas são o teste do rumo.",
+      "id": "pelotao",
+      "type": "pelotao",
+      "rotulo": "1º Pel. — Ten. Welsh",
+      "minPx": 5,
+      "grupo": { "n": 22, "espalhoM": 12, "homemM": 2.6, "formacao": "coluna", "semente": 3 },
+      "route": [
+        { "points": [[-1.25110, 49.29876], [-1.25010, 49.30020], [-1.24963, 49.30085]],
+          "duration": 10, "start": 0, "naRua": true },
+        { "points": [[-1.24963, 49.30085], [-1.24871, 49.30214], [-1.24802, 49.30285]],
+          "duration": 14, "start": 10, "naRua": true }
+      ]
+    },
+    {
+      "_": "Winters sozinho, para comparar: uma unidade sem grupo tem que apontar do mesmo jeito.",
+      "id": "winters",
+      "type": "paraquedista",
+      "rotulo": "Ten. Winters",
+      "sizeM": 2.8,
+      "minPx": 6,
+      "route": [
+        { "points": [[-1.25120, 49.29900], [-1.25020, 49.30035], [-1.24975, 49.30098]],
+          "duration": 11, "start": 1, "naRua": true },
+        { "points": [[-1.24975, 49.30098], [-1.24880, 49.30225], [-1.24812, 49.30296]],
+          "duration": 13, "start": 12, "naRua": true }
+      ]
+    },
+    {
+      "_": "A MG no canto, parada, só para haver algo fixo no quadro.",
+      "id": "mg42",
+      "type": "mg42",
+      "rotulo": "MG 42",
+      "lon": -1.24928, "lat": 49.30106, "heading": 212,
+      "sizeM": 2.8,
+      "minPx": 6,
+      "sai": 8,
+      "shots": [
+        { "t": 3.0, "burst": 2.2, "target": "pelotao" },
+        { "t": 6.0, "burst": 1.6, "target": "winters" }
+      ]
+    }
+  ]
+}

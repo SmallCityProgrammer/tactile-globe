@@ -1,6 +1,7 @@
 {
   "nome": "carentan",
   "png": "carentan.png",
+  "jpg": "carentan.jpg",
   "px": [
     4096,
     2304
@@ -24,6 +25,5 @@
     6325051.267211986,
     -136154.33776526237,
     6327794.499018394
-  ],
-  "jpg": "carentan.jpg"
+  ]
 }

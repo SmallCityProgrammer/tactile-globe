@@ -1,2 +1,4 @@
 render/
 node_modules/
+orto/.tiles/
+__pycache__/

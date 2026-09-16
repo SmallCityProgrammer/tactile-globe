@@ -15,3 +15,6 @@ texturas/
 
 __pycache__/
 
+
+# as fatias que o carentan.py --camadas grava para o tools/pincel.py: 150 MB por placa
+camadas/

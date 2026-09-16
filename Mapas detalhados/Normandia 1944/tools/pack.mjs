@@ -26,29 +26,48 @@ const TPL = path.join(RAIZ, 'src', 'template.html');
 const QGIS = path.join(RAIZ, 'qgis');
 const SPRITES = path.join(RAIZ, 'data', 'sprites');
 const CENAS = path.join(RAIZ, 'cenas');
+const MALHA = path.join(RAIZ, 'data', 'malha.json');
+const ORTO = path.join(RAIZ, 'orto');
 const SAIDA = path.join(RAIZ, 'carentan.html');
 
 /* A ordem das placas importa: a mais LARGA primeiro. O estúdio abre nela, e a
    validação de "está fora do mapa" usa a união de todas. */
-const ORDEM = ['carentan', 'periers', 'holgate'];
+const ORDEM = ['carentan', 'periers', 'holgate', 'holgate-perto', 'vala', 'entroncamento'];
 
 function morre(msg) { console.error('pack: ' + msg); process.exit(1); }
 
 let html = fs.readFileSync(TPL, 'utf8');
 let bytes = 0;
 
-/* ---------- as placas ---------- */
+/* ---------- as placas ----------
+   O DESENHO DO QGIS É O PADRÃO. A ortofoto existe e funciona (`--orto`), mas o
+   que faltava nunca foi detalhe de textura: era ZOOM. Espremer dez soldados numa
+   faixa de três pixels fazia parecer falta de resolução do mapa, e era falta de
+   aproximação da câmera mais a via medida em milímetro de tela. Consertados os
+   dois, o desenho dá o que a cena precisa — e é o estilo da casa.
+
+   As duas famílias de ficha .json são idênticas em limites e extensão, então a
+   troca não mexe em mais nada: mesma cena, mesmo grafo, mesma máscara. */
+const COM_ORTO = process.argv.includes('--orto');
 const placas = [];
 if (!fs.existsSync(QGIS)) morre('não achei a pasta qgis/');
-const fichas = fs.readdirSync(QGIS).filter((f) => f.endsWith('.json') && f !== 'osm.json');
-fichas.sort((a, b) => {
-  const ia = ORDEM.indexOf(path.basename(a, '.json')), ib = ORDEM.indexOf(path.basename(b, '.json'));
+const deOnde = new Map();          // nome -> {pasta, ficha}
+for (const [pasta, rotulo] of [[QGIS, 'desenho'], [ORTO, 'ortofoto']]) {
+  if (rotulo === 'ortofoto' && !COM_ORTO) continue;   // quem vem depois sobrepõe
+  if (!fs.existsSync(pasta)) continue;
+  for (const f of fs.readdirSync(pasta).filter((f) => f.endsWith('.json') && f !== 'osm.json')) {
+    const ficha = JSON.parse(fs.readFileSync(path.join(pasta, f), 'utf8'));
+    if (!ficha.extensao3857 || !ficha.limites) continue;        // não é ficha de placa
+    deOnde.set(ficha.nome, { pasta, rotulo, ficha });           // a ortofoto vem depois e sobrepõe
+  }
+}
+const fichas = [...deOnde.keys()].sort((a, b) => {
+  const ia = ORDEM.indexOf(a), ib = ORDEM.indexOf(b);
   return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
 });
-for (const f of fichas) {
-  const ficha = JSON.parse(fs.readFileSync(path.join(QGIS, f), 'utf8'));
-  if (!ficha.extensao3857 || !ficha.limites) continue;          // não é ficha de placa
-  const img = path.join(QGIS, ficha.jpg || ficha.png);
+for (const nome of fichas) {
+  const { pasta, rotulo, ficha } = deOnde.get(nome);
+  const img = path.join(pasta, ficha.jpg || ficha.png);
   if (!fs.existsSync(img)) {
     console.warn(`  (pulei ${ficha.nome}: falta ${path.basename(img)})`);
     continue;
@@ -64,8 +83,9 @@ for (const f of fichas) {
     larguraKm: ficha.larguraKm, metrosPorPixel: ficha.metrosPorPixel,
     mime: img.toLowerCase().endsWith('.jpg') ? 'image/jpeg' : 'image/png', b64: b64
   });
-  console.log(`placa ${ficha.nome}: ${ficha.px[0]}×${ficha.px[1]}  ${ficha.larguraKm} km  ` +
-              `${ficha.metrosPorPixel.toFixed(2)} m/px  ${(b64.length / 1048576).toFixed(2)} MB b64`);
+  console.log(`placa ${ficha.nome} (${rotulo}): ${ficha.px[0]}×${ficha.px[1]}  ` +
+              `${ficha.larguraKm} km  ${ficha.metrosPorPixel.toFixed(3)} m/px  ` +
+              `${(b64.length / 1048576).toFixed(2)} MB b64`);
 }
 if (!placas.length) morre('nenhuma placa em qgis/ — rode primeiro o carentan.py');
 
@@ -92,13 +112,30 @@ if (fs.existsSync(CENAS)) {
 }
 console.log(`cenas: ${Object.keys(cenas).join(', ') || '(nenhuma)'}`);
 
+/* ---------- a malha das ruas ---------- */
+// Sem ela o estúdio ainda abre, mas um passo com naRua:true volta a ser uma reta
+// e a validação para de reprovar quem atravessa prédio. Melhor gritar do que
+// deixar passar em silêncio: é justamente o tipo de erro que só aparece no vídeo.
+let malha = 'null';
+if (fs.existsSync(MALHA)) {
+  malha = fs.readFileSync(MALHA, 'utf8');
+  const j = JSON.parse(malha);
+  console.log(`malha: ${j.nos.length / 2} nós, ${j.arestas.length / 3} arestas, ` +
+              `bloqueio ${j.bloqueio.largura}×${j.bloqueio.altura} a ` +
+              `${j.bloqueio.metrosPorCelula} m (${(malha.length / 1024).toFixed(0)} KB)`);
+  bytes += malha.length;
+} else {
+  console.warn('malha: FALTA data/malha.json — rode primeiro:  node tools/malha.mjs');
+}
+
 /* ---------- montar ---------- */
 /* '<' vira <: uma cena com um '<' dentro de uma string fecharia a tag
    <script> e a página inteira morreria numa vírgula. */
 const seguro = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
 for (const [marca, valor] of [['__PLACAS_JSON__', seguro(placas)],
                               ['__SPRITES_JSON__', seguro(imagens)],
-                              ['__CENAS_JSON__', seguro(cenas)]]) {
+                              ['__CENAS_JSON__', seguro(cenas)],
+                              ['__MALHA_JSON__', malha.replace(/</g, '\\u003c')]]) {
   if (!html.includes(marca)) morre(`src/template.html não tem o marcador ${marca}`);
   html = html.replace(marca, () => valor);
 }

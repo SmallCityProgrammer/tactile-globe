@@ -1,0 +1,30 @@
+{
+  "nome": "entroncamento",
+  "jpg": "entroncamento.jpg",
+  "px": [
+    1400,
+    787
+  ],
+  "centro": [
+    -1.24963,
+    49.30085
+  ],
+  "larguraKm": 0.26,
+  "alturaKm": 0.14625000000000002,
+  "metrosPorPixel": 0.18571428571428572,
+  "limites": {
+    "oeste": -1.251420880034239,
+    "sul": 49.300193102570404,
+    "leste": -1.2478391199657608,
+    "norte": 49.301506888673444
+  },
+  "crs": "EPSG:3857",
+  "extensao3857": [
+    -139307.53513348178,
+    6325952.239109098,
+    -138908.81542651512,
+    6326176.518944266
+  ],
+  "fonte": "Ortofoto: BD ORTHO (r) IGN - Geoplateforme, licence ouverte Etalab 2.0",
+  "zoomTile": 19
+}

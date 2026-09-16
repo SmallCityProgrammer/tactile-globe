@@ -48,232 +48,919 @@
     "Nenhum tiro da MG 42 tem kill: a narração não mata ninguém aqui, ela diz",
     "que o pelotão ficou preso. Supressão é fogo que não acerta."
   ],
-
   "duracao": 120,
   "escalaDoTempo": 41,
   "relogio": "05:46",
   "time": 0,
   "scale": 1,
-
   "camera": {
     "chaves": [
-      { "t": 0,   "lon": -1.24800, "lat": 49.30300, "larguraM": 2400 },
-      { "t": 9,   "lon": -1.24800, "lat": 49.30300, "larguraM": 2400 },
-      { "t": 19,  "lon": -1.25230, "lat": 49.29950, "larguraM": 900 },
-      { "t": 28,  "lon": -1.25230, "lat": 49.29950, "larguraM": 900 },
-      { "t": 32,  "lon": -1.25070, "lat": 49.30000, "larguraM": 520 },
-      { "t": 44,  "lon": -1.25070, "lat": 49.30000, "larguraM": 520 },
-      { "t": 49,  "lon": -1.25060, "lat": 49.30020, "larguraM": 400 },
-      { "t": 58,  "lon": -1.25060, "lat": 49.30020, "larguraM": 400 },
-      { "t": 66,  "lon": -1.25060, "lat": 49.30030, "larguraM": 340 },
-      { "t": 73,  "lon": -1.25060, "lat": 49.30030, "larguraM": 340 },
-      { "t": 78,  "lon": -1.25020, "lat": 49.30050, "larguraM": 520 },
-      { "t": 84,  "lon": -1.25020, "lat": 49.30050, "larguraM": 520 },
-      { "t": 88,  "lon": -1.24955, "lat": 49.30095, "larguraM": 260 },
-      { "t": 92,  "lon": -1.24955, "lat": 49.30095, "larguraM": 260 },
-      { "t": 100, "lon": -1.24760, "lat": 49.30290, "larguraM": 900 },
-      { "t": 105, "lon": -1.24760, "lat": 49.30290, "larguraM": 900 },
-      { "t": 112, "lon": -1.24620, "lat": 49.30400, "larguraM": 1500 },
-      { "t": 114, "lon": -1.24620, "lat": 49.30400, "larguraM": 1500 },
-      { "t": 119, "lon": -1.24800, "lat": 49.30300, "larguraM": 2400 }
+      {
+        "t": 0,
+        "lon": -1.248,
+        "lat": 49.303,
+        "larguraM": 2400
+      },
+      {
+        "t": 9,
+        "lon": -1.248,
+        "lat": 49.303,
+        "larguraM": 2400
+      },
+      {
+        "t": 19,
+        "lon": -1.2523,
+        "lat": 49.2995,
+        "larguraM": 900
+      },
+      {
+        "t": 28,
+        "lon": -1.2523,
+        "lat": 49.2995,
+        "larguraM": 900
+      },
+      {
+        "t": 32,
+        "lon": -1.2507,
+        "lat": 49.3,
+        "larguraM": 520
+      },
+      {
+        "t": 44,
+        "lon": -1.2507,
+        "lat": 49.3,
+        "larguraM": 520
+      },
+      {
+        "t": 49,
+        "lon": -1.2506,
+        "lat": 49.3002,
+        "larguraM": 400
+      },
+      {
+        "t": 58,
+        "lon": -1.2506,
+        "lat": 49.3002,
+        "larguraM": 400
+      },
+      {
+        "t": 66,
+        "lon": -1.2506,
+        "lat": 49.3003,
+        "larguraM": 340
+      },
+      {
+        "t": 73,
+        "lon": -1.2506,
+        "lat": 49.3003,
+        "larguraM": 340
+      },
+      {
+        "t": 78,
+        "lon": -1.2502,
+        "lat": 49.3005,
+        "larguraM": 520
+      },
+      {
+        "t": 84,
+        "lon": -1.2502,
+        "lat": 49.3005,
+        "larguraM": 520
+      },
+      {
+        "t": 88,
+        "lon": -1.24955,
+        "lat": 49.30095,
+        "larguraM": 260
+      },
+      {
+        "t": 92,
+        "lon": -1.24955,
+        "lat": 49.30095,
+        "larguraM": 260
+      },
+      {
+        "t": 100,
+        "lon": -1.2476,
+        "lat": 49.3029,
+        "larguraM": 900
+      },
+      {
+        "t": 105,
+        "lon": -1.2476,
+        "lat": 49.3029,
+        "larguraM": 900
+      },
+      {
+        "t": 112,
+        "lon": -1.2462,
+        "lat": 49.304,
+        "larguraM": 1500
+      },
+      {
+        "t": 114,
+        "lon": -1.2462,
+        "lat": 49.304,
+        "larguraM": 1500
+      },
+      {
+        "t": 119,
+        "lon": -1.248,
+        "lat": 49.303,
+        "larguraM": 2400
+      }
     ]
   },
-
   "marcos": [
-    { "lon": -1.25324, "lat": 49.29499, "texto": "vindos de La Billonnerie",
-      "entra": 5, "sai": 30 },
-    { "lon": -1.24963, "lat": 49.30085, "texto": "entroncamento em T",
-      "tipo": "objetivo", "entra": 15, "tomado": 88, "sai": 99 },
-    { "lon": -1.24800, "lat": 49.30280, "texto": "Rue Holgate", "entra": 91, "sai": 108 },
-    { "lon": -1.24315, "lat": 49.30557, "texto": "Notre-Dame", "entra": 106 },
-    { "lon": -1.24660, "lat": 49.30330, "texto": "CARENTAN", "tam": 17, "cor": "#2b2f24",
-      "entra": 113 }
+    {
+      "lon": -1.25324,
+      "lat": 49.29499,
+      "texto": "vindos de La Billonnerie",
+      "entra": 5,
+      "sai": 30
+    },
+    {
+      "lon": -1.24963,
+      "lat": 49.30085,
+      "texto": "entroncamento em T",
+      "tipo": "objetivo",
+      "entra": 15,
+      "tomado": 88,
+      "sai": 99
+    },
+    {
+      "lon": -1.248,
+      "lat": 49.3028,
+      "texto": "Rue Holgate",
+      "entra": 91,
+      "sai": 108
+    },
+    {
+      "lon": -1.24315,
+      "lat": 49.30557,
+      "texto": "Notre-Dame",
+      "entra": 106
+    },
+    {
+      "lon": -1.2466,
+      "lat": 49.3033,
+      "texto": "CARENTAN",
+      "tam": 17,
+      "cor": "#2b2f24",
+      "entra": 113
+    }
   ],
-
   "sprites": [
     {
       "_": "A MG 42 no prédio do canto do entroncamento — hoje o Bar du Stade. Nenhuma rajada tem kill: a narração diz que o pelotão ficou preso, não que morreu.",
       "id": "mg42",
       "type": "mg42",
       "rotulo": "MG 42 — Bar du Stade",
-      "lon": -1.24928, "lat": 49.30106, "heading": 212,
-      "sizeM": 11,
+      "lon": -1.24928,
+      "lat": 49.30106,
+      "heading": 212,
+      "sizeM": 2.8,
       "shots": [
-        { "t": 28.0, "burst": 3.4, "target": "easy-1pel" },
-        { "t": 32.5, "burst": 2.4, "target": "easy-1pel" },
-        { "t": 37.0, "burst": 3.0, "target": "vala-norte" },
-        { "t": 41.0, "burst": 2.2, "target": "vala-sul" },
-        { "t": 45.5, "burst": 2.4, "target": "welsh-7" },
-        { "t": 52.0, "burst": 2.6, "target": "winters" },
-        { "t": 56.5, "burst": 2.4, "target": "winters" },
-        { "t": 62.0, "burst": 2.0, "target": "vala-norte" },
-        { "t": 66.5, "burst": 2.2, "target": "vala-sul" },
-        { "t": 70.5, "burst": 2.0, "target": "winters" },
-        { "t": 75.5, "burst": 2.6, "target": "vala-norte" },
-        { "t": 80.0, "burst": 2.2, "target": "vala-sul" }
-      ]
+        {
+          "t": 28.0,
+          "burst": 3.4,
+          "target": "easy-1pel"
+        },
+        {
+          "t": 32.5,
+          "burst": 2.4,
+          "target": "easy-1pel"
+        },
+        {
+          "t": 37.0,
+          "burst": 3.0,
+          "target": "vala-norte"
+        },
+        {
+          "t": 41.0,
+          "burst": 2.2,
+          "target": "vala-sul"
+        },
+        {
+          "t": 45.5,
+          "burst": 2.4,
+          "target": "welsh-7"
+        },
+        {
+          "t": 52.0,
+          "burst": 2.6,
+          "target": "winters"
+        },
+        {
+          "t": 56.5,
+          "burst": 2.4,
+          "target": "winters"
+        },
+        {
+          "t": 62.0,
+          "burst": 2.0,
+          "target": "vala-norte"
+        },
+        {
+          "t": 66.5,
+          "burst": 2.2,
+          "target": "vala-sul"
+        },
+        {
+          "t": 70.5,
+          "burst": 2.0,
+          "target": "winters"
+        },
+        {
+          "t": 75.5,
+          "burst": 2.6,
+          "target": "vala-norte"
+        },
+        {
+          "t": 80.0,
+          "burst": 2.2,
+          "target": "vala-sul"
+        }
+      ],
+      "minPx": 6
     },
-
     {
       "_": "O grosso da Easy: dois pelotões subindo atrás. Param de 28 a 74 como todo mundo — se seguissem andando, chegariam ao entroncamento antes da granada.",
       "id": "easy-coluna",
       "type": "pelotao",
       "rotulo": "Easy Co. — 2/506",
       "sizeM": 44,
-      "grupo": { "n": 26, "espalhoM": 17, "formacao": "coluna", "semente": 11 },
+      "grupo": {
+        "n": 26,
+        "espalhoM": 12,
+        "formacao": "coluna",
+        "semente": 11,
+        "homemM": 2.6
+      },
       "route": [
-        { "points": [[-1.25480, 49.29540], [-1.25380, 49.29625], [-1.25290, 49.29700]],
-          "duration": 8, "start": 20 },
-        { "esperar": 46 },
-        { "points": [[-1.25290, 49.29700], [-1.25190, 49.29765], [-1.25110, 49.29876],
-                     [-1.25010, 49.30020], [-1.24963, 49.30085]],
-          "duration": 16, "start": 74 },
-        { "points": [[-1.24963, 49.30085], [-1.24871, 49.30214], [-1.24802, 49.30285]],
-          "duration": 12, "start": 90 },
-        { "esperar": 3 },
-        { "points": [[-1.24802, 49.30285], [-1.24705, 49.30345], [-1.24590, 49.30402]],
-          "duration": 7, "start": 105 }
+        {
+          "points": [
+            [
+              -1.2548,
+              49.2954
+            ],
+            [
+              -1.2538,
+              49.29625
+            ],
+            [
+              -1.2529,
+              49.297
+            ]
+          ],
+          "duration": 8,
+          "start": 20,
+          "naRua": true
+        },
+        {
+          "esperar": 46
+        },
+        {
+          "points": [
+            [
+              -1.2529,
+              49.297
+            ],
+            [
+              -1.2519,
+              49.29765
+            ],
+            [
+              -1.2511,
+              49.29876
+            ],
+            [
+              -1.2501,
+              49.3002
+            ],
+            [
+              -1.24963,
+              49.30085
+            ]
+          ],
+          "duration": 16,
+          "start": 74,
+          "naRua": true
+        },
+        {
+          "points": [
+            [
+              -1.24963,
+              49.30085
+            ],
+            [
+              -1.24871,
+              49.30214
+            ],
+            [
+              -1.24802,
+              49.30285
+            ]
+          ],
+          "duration": 12,
+          "start": 90,
+          "naRua": true
+        },
+        {
+          "esperar": 3
+        },
+        {
+          "points": [
+            [
+              -1.24802,
+              49.30285
+            ],
+            [
+              -1.24705,
+              49.30345
+            ],
+            [
+              -1.2459,
+              49.30402
+            ]
+          ],
+          "duration": 7,
+          "start": 105,
+          "naRua": true
+        }
       ],
       "shots": [
-        { "t": 94.0, "burst": 1.6, "toward": [-1.24840, 49.30240] },
-        { "t": 97.5, "burst": 1.4, "toward": [-1.24760, 49.30300] }
-      ]
+        {
+          "t": 94.0,
+          "burst": 1.6,
+          "toward": [
+            -1.2484,
+            49.3024
+          ]
+        },
+        {
+          "t": 97.5,
+          "burst": 1.4,
+          "toward": [
+            -1.2476,
+            49.303
+          ]
+        }
+      ],
+      "minPx": 5
     },
-
     {
       "_": "O 1º Pelotão inteiro, até o instante em que se parte. Sai de cena em 32 e as três peças entram no lugar dele.",
       "id": "easy-1pel",
       "type": "pelotao",
       "rotulo": "1º Pel. — Ten. Welsh",
       "sizeM": 38,
-      "grupo": { "n": 22, "espalhoM": 15, "formacao": "coluna", "semente": 3 },
+      "grupo": {
+        "n": 22,
+        "espalhoM": 12,
+        "formacao": "coluna",
+        "semente": 3,
+        "homemM": 2.6
+      },
       "sai": 32,
       "route": [
-        { "points": [[-1.25190, 49.29765], [-1.25110, 49.29876], [-1.25060, 49.29950]],
-          "duration": 8, "start": 20 }
-      ]
+        {
+          "points": [
+            [
+              -1.2519,
+              49.29765
+            ],
+            [
+              -1.2511,
+              49.29876
+            ],
+            [
+              -1.2506,
+              49.2995
+            ]
+          ],
+          "duration": 8,
+          "start": 20,
+          "naRua": true
+        }
+      ],
+      "minPx": 5
     },
-
     {
       "_": "A vala do lado norte da estrada. Entra em 31,5 e a primeira perna é o pulo de 15 m para fora da pista.",
       "id": "vala-norte",
       "type": "esquadra",
       "sizeM": 26,
-      "grupo": { "n": 8, "espalhoM": 11, "formacao": "linha", "semente": 21 },
+      "grupo": {
+        "n": 8,
+        "espalhoM": 9,
+        "formacao": "linha",
+        "semente": 21,
+        "homemM": 2.6
+      },
       "entra": 31.5,
       "route": [
-        { "points": [[-1.25060, 49.29950], [-1.250787, 49.299557]], "duration": 1.6, "start": 32 },
-        { "esperar": 40.4 },
-        { "points": [[-1.250787, 49.299557], [-1.25010, 49.30020], [-1.24963, 49.30085]],
-          "duration": 14, "start": 74 },
-        { "points": [[-1.24963, 49.30085], [-1.24871, 49.30214], [-1.24802, 49.30285]],
-          "duration": 14, "start": 88 },
-        { "esperar": 3 },
-        { "points": [[-1.24802, 49.30285], [-1.24705, 49.30345], [-1.24590, 49.30402],
-                     [-1.24510, 49.30442]],
-          "duration": 7, "start": 105 }
+        {
+          "points": [
+            [
+              -1.2506,
+              49.2995
+            ],
+            [
+              -1.250787,
+              49.299557
+            ]
+          ],
+          "duration": 1.6,
+          "start": 32
+        },
+        {
+          "esperar": 40.4
+        },
+        {
+          "points": [
+            [
+              -1.250787,
+              49.299557
+            ],
+            [
+              -1.2501,
+              49.3002
+            ],
+            [
+              -1.24963,
+              49.30085
+            ]
+          ],
+          "duration": 14,
+          "start": 74,
+          "naRua": true
+        },
+        {
+          "points": [
+            [
+              -1.24963,
+              49.30085
+            ],
+            [
+              -1.24871,
+              49.30214
+            ],
+            [
+              -1.24802,
+              49.30285
+            ]
+          ],
+          "duration": 14,
+          "start": 88,
+          "naRua": true
+        },
+        {
+          "esperar": 3
+        },
+        {
+          "points": [
+            [
+              -1.24802,
+              49.30285
+            ],
+            [
+              -1.24705,
+              49.30345
+            ],
+            [
+              -1.2459,
+              49.30402
+            ],
+            [
+              -1.2451,
+              49.30442
+            ]
+          ],
+          "duration": 7,
+          "start": 105,
+          "naRua": true
+        }
       ],
       "shots": [
-        { "t": 95.0, "burst": 1.3, "toward": [-1.24820, 49.30250] },
-        { "t": 99.0, "burst": 1.2, "toward": [-1.24730, 49.30320] }
-      ]
+        {
+          "t": 95.0,
+          "burst": 1.3,
+          "toward": [
+            -1.2482,
+            49.3025
+          ]
+        },
+        {
+          "t": 99.0,
+          "burst": 1.2,
+          "toward": [
+            -1.2473,
+            49.3032
+          ]
+        }
+      ],
+      "minPx": 5
     },
-
     {
       "_": "A vala do lado sul.",
       "id": "vala-sul",
       "type": "esquadra",
       "sizeM": 24,
-      "grupo": { "n": 7, "espalhoM": 11, "formacao": "linha", "semente": 37 },
+      "grupo": {
+        "n": 7,
+        "espalhoM": 9,
+        "formacao": "linha",
+        "semente": 37,
+        "homemM": 2.6
+      },
       "entra": 31.5,
       "route": [
-        { "points": [[-1.25060, 49.29950], [-1.250413, 49.299443]], "duration": 1.6, "start": 32 },
-        { "esperar": 40.4 },
-        { "points": [[-1.250413, 49.299443], [-1.25005, 49.30015], [-1.24958, 49.30078]],
-          "duration": 14, "start": 74 },
-        { "points": [[-1.24958, 49.30078], [-1.24866, 49.30208], [-1.24797, 49.30279]],
-          "duration": 14, "start": 88 },
-        { "esperar": 3 },
-        { "points": [[-1.24797, 49.30279], [-1.24700, 49.30339], [-1.24585, 49.30396]],
-          "duration": 7, "start": 105 }
-      ]
+        {
+          "points": [
+            [
+              -1.2506,
+              49.2995
+            ],
+            [
+              -1.250413,
+              49.299443
+            ]
+          ],
+          "duration": 1.6,
+          "start": 32
+        },
+        {
+          "esperar": 40.4
+        },
+        {
+          "points": [
+            [
+              -1.250413,
+              49.299443
+            ],
+            [
+              -1.25005,
+              49.30015
+            ],
+            [
+              -1.24958,
+              49.30078
+            ]
+          ],
+          "duration": 14,
+          "start": 74,
+          "naRua": true
+        },
+        {
+          "points": [
+            [
+              -1.24958,
+              49.30078
+            ],
+            [
+              -1.24866,
+              49.30208
+            ],
+            [
+              -1.24797,
+              49.30279
+            ]
+          ],
+          "duration": 14,
+          "start": 88,
+          "naRua": true
+        },
+        {
+          "esperar": 3
+        },
+        {
+          "points": [
+            [
+              -1.24797,
+              49.30279
+            ],
+            [
+              -1.247,
+              49.30339
+            ],
+            [
+              -1.24585,
+              49.30396
+            ]
+          ],
+          "duration": 7,
+          "start": 105,
+          "naRua": true
+        }
+      ],
+      "minPx": 5
     },
-
     {
       "_": "Welsh e seis homens. O 'quase' da frase 'quase todo o pelotão se joga nas valas': estes não entram na vala, rastejam pela margem norte e nunca param de progredir. 128 m em 12 s de filme dá menos de 1 km/h de verdade — é isso mesmo, é rastejo sob fogo.",
       "id": "welsh-7",
       "type": "granadeiro",
       "rotulo": "Welsh + 6",
       "sizeM": 18,
-      "grupo": { "n": 7, "espalhoM": 9, "formacao": "coluna", "semente": 59 },
+      "grupo": {
+        "n": 7,
+        "espalhoM": 9,
+        "formacao": "coluna",
+        "semente": 59,
+        "homemM": 2.6
+      },
       "entra": 31.5,
       "route": [
-        { "points": [[-1.25060, 49.29950], [-1.250700, 49.299560]], "duration": 1.6, "start": 32 },
-        { "esperar": 8.4 },
-        { "points": [[-1.250700, 49.299560], [-1.250350, 49.300060], [-1.249950, 49.300600]],
-          "duration": 12, "start": 42 },
-        { "esperar": 25 },
-        { "points": [[-1.249950, 49.300600], [-1.249480, 49.301000]], "duration": 5, "start": 79 },
-        { "points": [[-1.249480, 49.301000], [-1.24963, 49.30085]], "duration": 3, "start": 87 },
-        { "points": [[-1.24963, 49.30085], [-1.24871, 49.30214], [-1.24802, 49.30285]],
-          "duration": 12, "start": 90 }
+        {
+          "points": [
+            [
+              -1.2506,
+              49.2995
+            ],
+            [
+              -1.2507,
+              49.29956
+            ]
+          ],
+          "duration": 1.6,
+          "start": 32
+        },
+        {
+          "esperar": 8.4
+        },
+        {
+          "points": [
+            [
+              -1.2507,
+              49.29956
+            ],
+            [
+              -1.25035,
+              49.30006
+            ],
+            [
+              -1.25005,
+              49.30052
+            ]
+          ],
+          "duration": 12,
+          "start": 42,
+          "naRua": true
+        },
+        {
+          "esperar": 25
+        },
+        {
+          "points": [
+            [
+              -1.25005,
+              49.30052
+            ],
+            [
+              -1.2497,
+              49.30088
+            ]
+          ],
+          "duration": 5,
+          "start": 79,
+          "naRua": true
+        },
+        {
+          "points": [
+            [
+              -1.2497,
+              49.30088
+            ],
+            [
+              -1.24963,
+              49.30085
+            ]
+          ],
+          "duration": 3,
+          "start": 87
+        },
+        {
+          "points": [
+            [
+              -1.24963,
+              49.30085
+            ],
+            [
+              -1.24871,
+              49.30214
+            ],
+            [
+              -1.24802,
+              49.30285
+            ]
+          ],
+          "duration": 12,
+          "start": 90,
+          "naRua": true
+        }
       ],
       "shots": [
-        { "t": 85.0, "burst": 0.6, "target": "mg42", "kill": true },
-        { "t": 96.0, "burst": 0.5, "toward": [-1.24855, 49.30225] }
-      ]
+        {
+          "t": 85.0,
+          "burst": 0.6,
+          "target": "mg42",
+          "kill": true
+        },
+        {
+          "t": 96.0,
+          "burst": 0.5,
+          "toward": [
+            -1.24855,
+            49.30225
+          ]
+        }
+      ],
+      "minPx": 5
     },
-
     {
       "_": "Winters. Aparece na margem em 47, vai para o meio da estrada em 50 — equidistante das duas valas, 15 m de cada — e das 61 em diante vai e volta chutando os homens.",
       "id": "winters",
       "type": "paraquedista",
       "rotulo": "Ten. Winters",
-      "sizeM": 11,
+      "sizeM": 2.8,
       "entra": 47,
       "route": [
-        { "points": [[-1.25145, 49.29975], [-1.251150, 49.299850]], "duration": 2, "start": 47 },
-        { "esperar": 1 },
-        { "points": [[-1.251150, 49.299850], [-1.250875, 49.299950]], "duration": 3, "start": 50 },
-        { "esperar": 8 },
-        { "points": [[-1.250875, 49.299950], [-1.251000, 49.300150], [-1.250700, 49.299800],
-                     [-1.250950, 49.300100]],
-          "duration": 12, "start": 61 },
-        { "points": [[-1.250950, 49.300100], [-1.25010, 49.30020], [-1.24963, 49.30085]],
-          "duration": 14, "start": 74 },
-        { "points": [[-1.24963, 49.30085], [-1.24871, 49.30214], [-1.24802, 49.30285]],
-          "duration": 12, "start": 90 }
-      ]
+        {
+          "points": [
+            [
+              -1.25145,
+              49.29975
+            ],
+            [
+              -1.25115,
+              49.29985
+            ]
+          ],
+          "duration": 2,
+          "start": 47
+        },
+        {
+          "esperar": 1
+        },
+        {
+          "points": [
+            [
+              -1.25115,
+              49.29985
+            ],
+            [
+              -1.250875,
+              49.29995
+            ]
+          ],
+          "duration": 3,
+          "start": 50
+        },
+        {
+          "esperar": 8
+        },
+        {
+          "points": [
+            [
+              -1.250875,
+              49.29995
+            ],
+            [
+              -1.251,
+              49.30015
+            ],
+            [
+              -1.2507,
+              49.2998
+            ],
+            [
+              -1.25095,
+              49.3001
+            ]
+          ],
+          "duration": 12,
+          "start": 61,
+          "naRua": true
+        },
+        {
+          "points": [
+            [
+              -1.25095,
+              49.3001
+            ],
+            [
+              -1.2501,
+              49.3002
+            ],
+            [
+              -1.24963,
+              49.30085
+            ]
+          ],
+          "duration": 14,
+          "start": 74,
+          "naRua": true
+        },
+        {
+          "points": [
+            [
+              -1.24963,
+              49.30085
+            ],
+            [
+              -1.24871,
+              49.30214
+            ],
+            [
+              -1.24802,
+              49.30285
+            ]
+          ],
+          "duration": 12,
+          "start": 90,
+          "naRua": true
+        }
+      ],
+      "minPx": 6
     },
-
     {
       "_": "O morteiro alemão de 102. Fica a nordeste, dentro da cidade e FORA do quadro daquele momento — a narração diz que o fogo veio, não mostra de onde. Existe no mapa porque um impacto precisa de quem o dispare.",
       "id": "morteiro-de",
       "type": "morteiro",
-      "lon": -1.24380, "lat": 49.30640, "heading": 220,
-      "sizeM": 11,
+      "lon": -1.2438,
+      "lat": 49.3064,
+      "heading": 220,
+      "sizeM": 2.8,
       "entra": 99,
       "sai": 110,
       "shots": [
-        { "t": 102.0, "burst": 0.8, "toward": [-1.24790, 49.30292] },
-        { "t": 104.0, "burst": 0.8, "toward": [-1.24735, 49.30318] },
-        { "t": 106.2, "burst": 0.8, "toward": [-1.24828, 49.30262] }
-      ]
+        {
+          "t": 102.0,
+          "burst": 0.8,
+          "toward": [
+            -1.2479,
+            49.30292
+          ]
+        },
+        {
+          "t": 104.0,
+          "burst": 0.8,
+          "toward": [
+            -1.24735,
+            49.30318
+          ]
+        },
+        {
+          "t": 106.2,
+          "burst": 0.8,
+          "toward": [
+            -1.24828,
+            49.30262
+          ]
+        }
+      ],
+      "minPx": 6
     },
-
     {
       "_": "O 1/401 GIR, que descia do norte. Entra em 100, 240 m acima da Rue Holgate e fora do quadro, para já estar andando quando a câmera abrir em 105.",
       "id": "norte-401",
       "type": "pelotao",
       "rotulo": "1/401 GIR — do norte",
       "sizeM": 40,
-      "grupo": { "n": 20, "espalhoM": 16, "formacao": "coluna", "semente": 77 },
+      "grupo": {
+        "n": 20,
+        "espalhoM": 12,
+        "formacao": "coluna",
+        "semente": 77,
+        "homemM": 2.6
+      },
       "entra": 100,
       "route": [
-        { "points": [[-1.24430, 49.30670], [-1.24470, 49.30580], [-1.24500, 49.30500],
-                     [-1.24520, 49.30460]],
-          "duration": 12, "start": 100 }
-      ]
+        {
+          "points": [
+            [
+              -1.2443,
+              49.3067
+            ],
+            [
+              -1.2447,
+              49.3058
+            ],
+            [
+              -1.245,
+              49.305
+            ],
+            [
+              -1.2452,
+              49.3046
+            ]
+          ],
+          "duration": 12,
+          "start": 100,
+          "naRua": true
+        }
+      ],
+      "minPx": 5
     }
   ]
 }

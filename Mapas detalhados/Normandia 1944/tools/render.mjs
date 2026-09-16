@@ -274,7 +274,15 @@ let written = 0;
 for (let i = 0; i < total; i++) {
   const t = FROM + i / FPS;
   await evaluate(`(__mapa.seek(${t}), __mapa.render(), 1)`, false);
-  const shot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
+  // JPEG, e nao PNG. Medido: a 1920x1080 a codificacao do PNG dentro do Chrome
+  // mais o base64 de volta era a MAIOR fatia do quadro — 0,82 quadro/s, ou 73
+  // minutos para dois minutos de filme. O JPEG a 92 corta isso para um terco, e
+  // o que entra no ffmpeg ja vai virar H.264 com quantizacao muito mais grossa
+  // que a do JPEG: o que se perde aqui nao sobrevive ao codec de video de
+  // qualquer jeito. Quem quiser o quadro intacto usa --png.
+  const shot = await send('Page.captureScreenshot',
+    ARG.png ? { format: 'png', fromSurface: true, captureBeyondViewport: false }
+            : { format: 'jpeg', quality: 92, fromSurface: true, captureBeyondViewport: false });
   const buf = Buffer.from(shot.data, 'base64');
   if (FRAMEDIR) fs.writeFileSync(path.join(path.resolve(ROOT, FRAMEDIR), `f${String(i).padStart(5, '0')}.png`), buf);
   if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <rect x="0" y="0" width="200" height="100" fill="param(fill) #565b5f"/><rect x="0" y="0" width="200" height="49.0" fill="#ffffff" fill-opacity="0.11"/><rect x="0" y="51.0" width="200" height="49.0" fill="#000000" fill-opacity="0.15"/><rect x="0" y="48.5" width="200" height="3" fill="param(outline) #23271f" fill-opacity="0.50"/><polygon points="0,0 22.0,50.0 0,100" fill="#000000" fill-opacity="0.10"/><polygon points="200,0 178.0,50.0 200,100" fill="#000000" fill-opacity="0.10"/><rect x="0" y="0" width="200" height="3" fill="#ffffff" fill-opacity="0.22"/><rect x="0" y="93.0" width="200" height="7.000000000000001" fill="#000000" fill-opacity="0.30"/>
+</svg>

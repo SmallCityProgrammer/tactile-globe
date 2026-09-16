@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "malha": "node tools/malha.mjs",
     "pack": "node tools/pack.mjs",
     "check": "node tools/render.mjs --check",
     "render": "node tools/render.mjs"

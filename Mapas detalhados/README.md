@@ -17,7 +17,7 @@ Há duas famílias de projeto aqui, e elas não se parecem:
 |---|---|---|
 | `Pacífico WW2/qgis` | Pearl Harbor | o mais maduro; é onde quase tudo foi descoberto |
 | `Ardenas 1944/qgis` | Bastogne e o Bois Jacques | **banco de provas** — feito para ser quebrado |
-| `Normandia 1944/qgis` | Carentan | tem estúdio de cena e saída em mp4; **não revisei este** |
+| `Normandia 1944/qgis` | Carentan | estúdio de cena e mp4; é onde **as ruas foram resolvidas** (seção 8), pintadas em raster por cima do QGIS |
 | `Pacífico WW2/` (raiz) | carta do teatro, zoom contínuo | 194 slots de asset, todos trocáveis por PNG |
 | `Japão Feudal/` | Japão Sengoku, zoom contínuo | ilustrado, estilo *chōkanzu* |
 
@@ -47,6 +47,9 @@ fetch.mjs ─► osm.json ─► convert.mjs ─► *.geojson ─► <mapa>.py �
 4. **`estilo.py`** — a paleta e os símbolos. **Todo o estilo mora aqui**, e em
    nenhum outro lugar.
 5. **`<mapa>.py`** — monta, grava `.gpkg`, salva `.qgz`, renderiza.
+6. **`tools/pincel.py`** e o bloco `--camadas` do fim do `carentan.py` — as ruas
+   pintadas por cima, em raster. **Copie os dois**; o símbolo de linha do QGIS
+   não chega lá (seção 8).
 
 ```powershell
 & 'C:\Program Files\QGIS 3.44.12\bin\python-qgis-ltr.bat' ardenas.py
@@ -114,6 +117,13 @@ Quase todas foram **medidas**, não lidas em documentação.
   acertos em 5533; o casamento é posicional.
 
 ### Símbolos e efeitos
+
+- **`RenderMetersInMapUnits` sem elipsoide não é metro.** É unidade de mapa do
+  3857, que nesta latitude está esticada em 1/cos: **medido** nas fatias, a via
+  de "5,5 m" saía com 3,6 m de chão (fator 0,652 = cos 49,3°), em todas as
+  classes e em duas placas. Vale para tudo que o `estilo.py` mede em `CHAO` —
+  via, rio, trilho, copa — e vale nas Ardenas também (cos 50° = 0,64). O
+  `pincel.py` converte metros pela `larguraKm` da ficha, que é chão de verdade.
 
 - **Efeito de pintura não mora no símbolo.** `QgsFillSymbol` não tem
   `setPaintEffect`. Vai na camada de símbolo — ou, melhor, **no renderizador**:
@@ -296,6 +306,10 @@ entre os dois — a passagem é por arquivo, e não precisa haver.
 aproximar não a aumenta: de perto vira tapete denso. A solução é a mesma forma
 dos telhados — regra por escala com o tamanho em unidades de mapa.
 
+**Prédios.** As ruas foram (seção 8); o telhado e a sombra continuam do jeito
+que o QGIS os desenha, e são a próxima coisa que denuncia "vetor" no zoom
+fechado.
+
 **Volume nos prédios.** A extrusão por `QgsGeometryGeneratorSymbolLayer` está
 pesquisada e medida (2,83 s) e **não aplicada**: briga com a leitura de planta.
 
@@ -315,3 +329,121 @@ proceduralmente, no estilo do mapa. Se um dia se quiser testar pacotes prontos
 `telhado.py` — basta apontar os caminhos para outros arquivos. O aviso: sprite
 pronto tem proporção fixa e **só funciona se for escolhido por classe**, nunca
 esticado para todas as formas.
+
+---
+
+# 8. As ruas: pintadas por cima, em raster
+
+O símbolo de linha do QGIS tem um teto, e ele aparece no quadro fechado: faixa
+chapada, contorno de espessura uniforme, ponta em semicírculo. É símbolo de mapa
+rodoviário; com um pelotão andando em cima, é desenho animado. O que a
+referência tem é uma **estrada** — piso claro com remendos e desgaste de roda,
+beiral fino e escuro, capim batido no acostamento, calçada na cidade, sebe com
+sombra no campo — e nada disso cabe num símbolo de linha. Não vale a pena
+forçar: a rua sai do QGIS e é pintada em raster, por cima, em código.
+
+Tudo está em `Normandia 1944/tools/pincel.py` (o pincel) e no bloco `--camadas`
+do fim de `Normandia 1944/qgis/carentan.py` (as fatias). O README daquela pasta
+tem a explicação de cada peça; aqui é o caminho curto e o que mordeu.
+
+![Antes e depois: o toco do estacionamento, 110 m](Normandia%201944/docs/ruas-antes-depois-toco.jpg)
+
+![Antes e depois: a Rue Holgate, a rotatória e a ferrovia, 260 m](Normandia%201944/docs/ruas-antes-depois-holgate.jpg)
+
+## O caminho curto
+
+1. **Copie os dois arquivos** para o mapa novo: `tools/pincel.py` inteiro e o
+   bloco `--camadas` do fim do `carentan.py` (é a mesma função de render do
+   próprio script, três vezes: as camadas abaixo da via com fundo opaco, a via
+   sozinha e as de cima com alfa — menos trilho e sebe, que o pincel pinta).
+   O pincel roda no Python de fora (`py -3`, com PIL, numpy e scipy), não no do
+   QGIS.
+2. O pincel lê o que já existe: a ficha `<placa>.json` (extensão em 3857, px,
+   `larguraKm`, limites), o `via.geojson` com a tag do OSM no campo `h`, e —
+   se houver — `predio`, `urbano`, `agua`, `brejo`, `rio`, `ferro`, `sebe`.
+   O que não existe ele pula.
+3. Rode `carentan.py <placa> <px> --camadas`. Ele grava as fatias e **chama o
+   pincel no fim**; `--so-camadas` para antes. Leia a linha
+   `registro: 100% do eixo cai dentro da via do QGIS` — abaixo de 90% a ficha
+   ou a conversão lon/lat está errada, e nada do resto vale.
+4. As medidas moram no topo do `pincel.py`, **todas em metros de chão**: pista
+   por tag, beiral, orla, capim, calçada, sebe, lastro. Mude ali, e só ali.
+5. Julgue com **recortes**, nunca com a placa inteira: o mesmo lon/lat nas três
+   versões — cru, pintado, ortofoto — em 100 a 400 m de largura
+   (`pincel.py --recorte`). Foi assim que se viu que o tom estava invertido, e
+   olhando a placa inteira não se via.
+
+Tempos medidos: 7 a 11 s por fatia a 8192 px, 100 s de pincel na mesma placa,
+20 s nas de 4096. A nota de "~90 s por placa" nos READMEs antigos está velha.
+
+## O que mordeu no caminho
+
+Na ordem em que apareceu. Quase tudo foi **visto num recorte e medido**, não
+suposto.
+
+- **"5,5 m" que eram 3,6.** A primeira medição: o eixo rasterizado pelo
+  pincel contra a borda da via do QGIS deu meia-largura de 2,35 m onde o
+  estilo dizia 3,75. Fator 0,652 em todas as classes: `cos(lat)`. Está no
+  catálogo da seção 3. O pincel usa metros de chão, então a rua saiu uns 50%
+  mais larga do que saía — e do tamanho que tem.
+- **A ponta redonda.** É o cap do símbolo, e não vale brigar com ele. Em
+  raster: a **união** dos polígonos das vias, cada uma com ponta reta, e
+  círculo só onde a ponta cai em cima de outra via (a esquina, ou a via partida
+  em duas — cKDTree a 1,2 m). O beco termina reto; a esquina, redonda.
+- **Rua escura vira vala.** A primeira versão tinha asfalto escuro, "como
+  asfalto". Entre as casas virou trincheira, e na placa larga, veia preta.
+  Vista de cima a rua é a superfície **mais clara** do terreno (mede na
+  ortofoto: asfalto L≈155, grama 111). Piso claro e neutro (0,58 a 0,62), e
+  quem dá a leitura é o **beiral**: uma linha de 0,3 m, escura, nítida.
+- **Halo escuro simétrico é sombra de software.** Capim + vala + sombra da
+  sebe, dos dois lados de toda rua, lia como *outer glow*. Em volta da rua só
+  fica coisa clara (orla de cascalho com falhas, capim amarelado); o escuro
+  vem **só** da sombra da sebe, para sudeste, o mesmo lado da sombra dos
+  prédios.
+- **Gradiente no beiral deixa a rua fora de foco.** Ao lado de um telhado de
+  vetor nítido, 1,5 m de degradê parece desfoque. Linha fina, um pixel de
+  antialias, e o tremor com amplitude de 22 cm em 1,6 m — mordida de mato, não
+  onda de caneta.
+- **O ruído do PIL mostra a grade abaixo de 5 px.** O ruído é uma grade
+  aleatória pequena ampliada em bicúbico. Quando a escala pedida cai abaixo
+  de 5 px (2,2 m na placa de 0,78 m/px), o que aparece é a própria grade:
+  tracinhos periódicos ao longo da sebe e a trilha com cara de corda trançada.
+  A oitava nunca fica mais fina que 5 px.
+- **O tremor da borda tem que caber no polígono.** Somar ruído à distância
+  para dentro do polígono empurrava a borda para fora dele — e onde o ruído
+  era positivo aparecia **pista solta no campo**, manchas cinza a 50 m de
+  qualquer rua. A folga do polígono é 3 px mais duas amplitudes, e fora dele a
+  pista é zero.
+- **Bico no entroncamento.** Com um polígono por via, o toco estreito que
+  entra na rua larga atravessava o asfalto dela em ponta de seta, e a rotatória
+  ganhava cunhas bege nos cantos. União antes de pintar; beiral só no contorno
+  de fora da união; fechamento de 2 m para o canto de dentro sair arredondado.
+- **A calçada dava a volta no beco.** As faixas de fora vêm da distância ao
+  eixo, que em volta da ponta é um semicírculo. Cada faixa é recortada por um
+  polígono mais largo com a mesma ponta reta.
+- **Sebe em minhoca.** O vão da sebe sorteado com ruído de 16 m e três oitavas
+  saía em pedaços de 5 m, e de perto eram lagartas verdes ao lado da rua. Ruído
+  de 45 m e **uma** oitava. E só a mais de 60 m da cidade: com 25 m, sobrava
+  janela entre dois trechos urbanos e a sebe saía em fragmentos.
+- **A sebe do ladrilho do bocage era um dedo sujo.** `largura=0.030` de talhão
+  (4 m) mais sombra de 3 px (4 m) davam uma faixa escura de 8 m, que no quadro
+  fechado não lia como fila de árvores. `0.020` e `2` no `estilo.py`.
+- **Ferrovia sem lastro no brejo.** O lastro era mascarado por "nem água nem
+  brejo", e o aterro atravessa o brejo: sobravam 40 m de trilho no capim. Só a
+  água interrompe o lastro.
+- **O render cru cobre o pintado.** `carentan.py` grava `<placa>.png` cru, e
+  uma rodada sem `--camadas` devolve a placa crua ao estúdio sem avisar. Por
+  isso o `--camadas` chama o pincel no fim e falha alto se o pincel falhar.
+- **Três olhares acham mais que um.** Um painel de três juízes com lentes
+  diferentes (foto aérea, estilo Operations Room, artefatos), sobre os mesmos
+  recortes, achou o que uma pessoa olhando não viu: o tom invertido, o halo
+  simétrico, o bico. O que ficou de cada um está no README do Carentan. O
+  revisor de código não rodou (limite da sessão) — o `pincel.py` foi revisado
+  só por quem o escreveu.
+
+## O que ficou de fora, de propósito
+
+Dormentes na ferrovia (padrão periódico de 0,7 m: a 0,134 m/px aliasa),
+pintura de faixa (não havia em 1944), sombra de árvore de quintal na rua (não
+há posição de árvore no OSM). E os **prédios**, que são a próxima coisa a
+denunciar vetor no zoom fechado — mas isso é outra conversa.

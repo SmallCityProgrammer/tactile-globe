@@ -1,0 +1,30 @@
+{
+  "nome": "holgate",
+  "jpg": "holgate.jpg",
+  "px": [
+    5632,
+    3168
+  ],
+  "centro": [
+    -1.24737,
+    49.30264
+  ],
+  "larguraKm": 1.1,
+  "alturaKm": 0.6187500000000001,
+  "metrosPorPixel": 0.1953125,
+  "limites": {
+    "oeste": -1.2549470753673366,
+    "sul": 49.29986075871954,
+    "leste": -1.2397929246326638,
+    "norte": 49.3054190845408
+  },
+  "crs": "EPSG:3857",
+  "extensao3857": [
+    -139700.06940239982,
+    6325895.504775373,
+    -138013.11705921154,
+    6326844.415468417
+  ],
+  "fonte": "Ortofoto: BD ORTHO (r) IGN - Geoplateforme, licence ouverte Etalab 2.0",
+  "zoomTile": 19
+}

@@ -7,8 +7,8 @@
 # terra e obtida poligonizando (costa + retangulo da moldura) e ficando com as
 # faces onde a DENSIDADE de predio e alta — o mar tem quase nenhum.
 #
-# O estilo esta todo na secao ESTILO, em um lugar so. A ideia da referencia:
-#   agua   = teal com listra horizontal fina (a "lona") + halo claro de raso
+# O estilo mora inteiro em estilo.py. A ideia da referencia:
+#   agua   = teal manchado por ruido fBm emendavel + halo claro de raso
 #   terra  = oliva com a borda esmaecendo para areia (shapeburst) e sombra
 #   bege   = NAO e a terra, e so a area construida da base (apron dos predios)
 #   verde  = mata mais escura salpicada de copas
@@ -39,115 +39,7 @@ MOLDURA_ON = True        # a borda branca rasgada da referencia
 qgs = QgsApplication([], False); qgs.initQgis(); Processing.initialize()
 tr = QgsCoordinateTransform(WGS, MERC, QgsProject.instance())
 
-# ============================================================== PALETA
-MAR        = '#2b8492'   # o corpo da agua
-MAR_LISTRA = '#3a95a2'   # a listra clara da "lona"
-MAR_TRAMA  = '#24747f'   # a contra-listra, quase invisivel
-RASO       = '#57aab3'   # o halo de agua rasa encostando na costa
-TERRA      = '#8d9a4e'   # o oliva do terreno
-AREIA      = '#cdc08d'   # a borda de areia, para onde o oliva esmaece
-MATA       = '#6f8340'   # a mata
-COPA       = '#5b6f33'   # as copas salpicadas na mata
-BASE       = '#c3b283'   # o bege da area construida (nao e a terra!)
-PISTA      = '#6d6146'   # asfalto do campo de aviacao
-CAIS       = '#a89c82'
-VIA        = '#9b968c'
-VIA_ORLA   = '#7f7a71'
-PREDIO     = '#7b7062'
-SOMBRA     = '#1b5a63'   # a sombra da terra cai na agua, entao e escura e teal
-PAPEL      = '#f3efe1'   # a moldura
-
-# ============================================================== ESTILO
-MM = QgsUnitTypes.RenderMillimeters
-
-def _mm(o, *setters):
-    for s in setters:
-        if hasattr(o, s): getattr(o, s)(MM)
-    return o
-
-def sombra(dist=0.9, blur=2.4, cor=SOMBRA, op=0.45, ang=135):
-    """Sombra projetada + o proprio desenho, nessa ordem."""
-    e = QgsDropShadowEffect()
-    e.setOffsetDistance(dist); _mm(e, 'setOffsetUnit')
-    try: e.setBlurLevel(blur)
-    except TypeError: e.setBlurLevel(int(round(blur)))
-    _mm(e, 'setBlurUnit')
-    e.setOffsetAngle(ang); e.setColor(QColor(cor)); e.setOpacity(op)
-    st = QgsEffectStack(); st.appendEffect(e); st.appendEffect(QgsDrawSourceEffect())
-    return st
-
-def simples(cor, borda=None, larg=0.2):
-    sl = QgsSimpleFillSymbolLayer(QColor(cor))
-    sl.setStrokeStyle(0 if not borda else 1)
-    if borda: sl.setStrokeColor(QColor(borda)); sl.setStrokeWidth(larg); _mm(sl, 'setStrokeWidthUnit')
-    return sl
-
-def veste(layer, *camadas, efeito=None):
-    """Monta um QgsFillSymbol com as camadas dadas, de baixo para cima."""
-    s = QgsFillSymbol(); s.deleteSymbolLayer(0)
-    for c in camadas: s.appendSymbolLayer(c)
-    # o efeito mora na camada de simbolo, nao no simbolo: vai na primeira, que e o corpo
-    if efeito is not None: camadas[0].setPaintEffect(efeito)
-    layer.setRenderer(QgsSingleSymbolRenderer(s)); return layer
-
-def agua_lona():
-    """O teal com a trama. Tres camadas: corpo, listra horizontal, contra-listra."""
-    corpo = simples(MAR)
-    listra = QgsLinePatternFillSymbolLayer()
-    listra.setLineAngle(0); listra.setDistance(1.6); listra.setLineWidth(0.62)
-    listra.setColor(QColor(MAR_LISTRA)); _mm(listra, 'setDistanceUnit', 'setLineWidthUnit')
-    trama = QgsLinePatternFillSymbolLayer()
-    trama.setLineAngle(90); trama.setDistance(3.2); trama.setLineWidth(0.22)
-    trama.setColor(QColor(MAR_TRAMA)); _mm(trama, 'setDistanceUnit', 'setLineWidthUnit')
-    try: trama.setOpacity(0.35)
-    except AttributeError: pass
-    return [corpo, listra, trama]
-
-def costa_areia():
-    """
-    A praia. Duas camadas: um fundo de areia que transborda a costa por um traco
-    largo (entao a areia aparece dos dois lados da linha d'agua), e por cima o
-    shapeburst, que leva a areia ao oliva no primeiro tanto de metros de terra.
-    Medidas em mm: a praia tem largura constante na tela, como no desenho.
-    """
-    praia = QgsSimpleFillSymbolLayer(QColor(AREIA))
-    praia.setStrokeStyle(1); praia.setStrokeColor(QColor(AREIA))
-    praia.setStrokeWidth(2.0); _mm(praia, 'setStrokeWidthUnit')
-    sb = QgsShapeburstFillSymbolLayer()
-    sb.setColor(QColor(AREIA)); sb.setColor2(QColor(TERRA))
-    sb.setUseWholeShape(False); sb.setMaxDistance(4.5); _mm(sb, 'setDistanceUnit')
-    sb.setBlurRadius(4)
-    return [praia, sb]
-
-def halo_raso():
-    """A agua rasa encostando na costa: a propria terra, engordada por um traco."""
-    sl = QgsSimpleFillSymbolLayer(QColor(RASO))
-    sl.setStrokeStyle(1); sl.setStrokeColor(QColor(RASO))
-    sl.setStrokeWidth(5.0); _mm(sl, 'setStrokeWidthUnit')
-    return sl
-
-def copas():
-    """As copas salpicadas: um padrao de pontos, desencontrado linha a linha."""
-    m = QgsSimpleMarkerSymbolLayer()
-    m.setColor(QColor(COPA)); m.setStrokeStyle(0); m.setSize(1.05); _mm(m, 'setSizeUnit')
-    ms = QgsMarkerSymbol(); ms.changeSymbolLayer(0, m)
-    pp = QgsPointPatternFillSymbolLayer()
-    pp.setDistanceX(1.9); pp.setDistanceY(1.9); pp.setDisplacementX(0.95)
-    _mm(pp, 'setDistanceXUnit', 'setDistanceYUnit', 'setDisplacementXUnit')
-    for s, v in (('setRandomDeviationX', 0.5), ('setRandomDeviationY', 0.5)):
-        if hasattr(pp, s):
-            getattr(pp, s)(v)
-            _mm(pp, s.replace('set', 'set').replace('Deviation', 'Deviation') + 'Unit')
-    pp.setSubSymbol(ms)
-    return pp
-
-def via_dupla(layer):
-    orla = QgsSimpleLineSymbolLayer(QColor(VIA_ORLA)); orla.setWidth(0.62)
-    nucleo = QgsSimpleLineSymbolLayer(QColor(VIA)); nucleo.setWidth(0.38)
-    s = QgsLineSymbol(); s.deleteSymbolLayer(0)
-    for c in (orla, nucleo):
-        c.setPenCapStyle(1); c.setPenJoinStyle(1); _mm(c, 'setWidthUnit'); s.appendSymbolLayer(c)
-    layer.setRenderer(QgsSingleSymbolRenderer(s)); return layer
+from estilo import *   # a paleta e os simbolos moram la, e provas.py usa os mesmos
 
 # ============================================================== DADOS
 def load(name):
@@ -266,21 +158,21 @@ if navios is not None: navios = grava(navios, 'navios')
 raso = QgsVectorLayer(terra.source(), 'raso', 'ogr')
 
 # ============================================================== VESTIR TUDO
-verde, aero, pier, via, agua = load('verde'), load('aero'), load('pier'), load('via'), load('agua')
+verde, aero, pier, via, agua_int = load('verde'), load('aero'), load('pier'), load('via'), load('agua')
 
-veste(mar, *agua_lona())
+veste(mar, *agua(HERE))
 veste(raso, halo_raso())
 veste(terra, *costa_areia(), efeito=sombra(1.4, 3.4, SOMBRA, 0.45, 125))
 veste(base, simples(BASE))
 if verde: veste(verde, simples(MATA), copas())
 if aero:  veste(aero, simples(PISTA))
 if pier:  veste(pier, simples(CAIS, '#8a7f68', 0.12))
-if agua:  veste(agua, simples(MAR_LISTRA))
+if agua_int: veste(agua_int, simples(MAR_CLARO))
 if via:   via_dupla(via)
 veste(predios, simples(PREDIO))
 if navios is not None: veste(navios, simples('#43433f', '#1b1b1a', 0.3))
 
-ordem = [l for l in (navios, predios, via, pier, aero, agua, verde, base, terra, raso, mar) if l]
+ordem = [l for l in (navios, predios, via, pier, aero, agua_int, verde, base, terra, raso, mar) if l]
 
 proj = QgsProject.instance(); proj.setCrs(MERC)
 raiz = proj.layerTreeRoot()

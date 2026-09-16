@@ -447,3 +447,33 @@ alinhamento com a tela mas mantém a régua. Juntas, viram concreto despejado.
 
 A chapa do pátio não é emendável, e nunca foi — mas ela é maior que a tela, então
 a emenda nunca entra no quadro.
+
+---
+
+## O acabamento
+
+```powershell
+& 'C:\Program Files\QGIS 3.44.12\bin\python-qgis-ltr.bat' pos.py saida/ford-3000
+```
+
+`pos.py` faz em código o que se faria no Photoshop para a imagem inteira:
+oclusão, suavização da aresta de vetor, brilho nas áreas claras, tonalização
+dividida, vinheta e grão. Duas receitas, `leve` e `forte`, e um painel
+comparando as duas com o original.
+
+**Por que em código.** Pintar à mão é melhor para o que é *único* — escombro,
+fumaça, cratera, letreiro. Mas tudo que se pinta à mão se perde no próximo render
+do QGIS. Estas operações valem para a imagem inteira e ninguém quer refazê-las a
+cada ajuste de cor; em código voltam em seis segundos.
+
+**Por que a pasta de camadas, e não o achatado.** A oclusão sai do **alfa dos
+prédios e das árvores**, então a penumbra cai onde há coisa em pé — e não onde a
+cor por acaso é escura. Uma imagem plana não permite isso.
+
+A primeira tentativa saiu no `forte` e passou do ponto: halo escuro em volta de
+cada moita, verde escurecido demais. A referência do Operations Room é mais clara
+e mais lavada do que a intuição de "tratar a imagem" sugere — tratar de menos
+erra menos que tratar de mais.
+
+> O QGIS exporta em 8 bits. Para gradar pesado à mão depois, converta para 16
+> bits antes, senão os degradês grandes da água podem bandear.
